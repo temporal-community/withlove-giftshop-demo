@@ -1,0 +1,140 @@
+@using System.Text.RegularExpressions
+
+@foreach (var segment in ParseSegments(Text))
+{
+    @if (segment.Type == SegmentType.Image)
+    {
+        <div class="my-2">
+            <img src="@segment.Url" alt="@segment.Alt"
+                 class="rounded-lg max-w-full max-h-48 object-cover border border-stone-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                 loading="lazy" />
+            @if (!string.IsNullOrEmpty(segment.Alt) && segment.Alt != segment.Url)
+            {
+                <span class="text-xs text-stone-400 mt-1 block">@segment.Alt</span>
+            }
+        </div>
+    }
+    else
+    {
+        @((MarkupString)FormatText(segment.Content))
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = "";
+
+    private enum SegmentType { Text, Image }
+
+    private record Segment(SegmentType Type, string Content, string? Url = null, string? Alt = null);
+
+    // Matches markdown images: ![alt text](url)
+    private static readonly Regex MarkdownImageRegex = new(
+        @"!\[([^\]]*)\]\(([^)]+)\)",
+        RegexOptions.Compiled);
+
+    // Matches standalone image URLs on their own line
+    private static readonly Regex StandaloneImageUrlRegex = new(
+        @"^(https?://\S+\.(?:jpg|jpeg|png|gif|webp|svg|avif)(?:\?\S*)?)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+    private static List<Segment> ParseSegments(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return [new Segment(SegmentType.Text, "")];
+
+        var segments = new List<Segment>();
+        var remaining = text;
+
+        // First pass: extract markdown images ![alt](url)
+        var mdMatches = MarkdownImageRegex.Matches(remaining);
+        var lastIndex = 0;
+
+        foreach (Match match in mdMatches)
+        {
+            if (match.Index > lastIndex)
+            {
+                var before = remaining[lastIndex..match.Index];
+                AddTextOrImageSegments(segments, before);
+            }
+
+            segments.Add(new Segment(SegmentType.Image, "", Url: match.Groups[2].Value, Alt: match.Groups[1].Value));
+            lastIndex = match.Index + match.Length;
+        }
+
+        if (lastIndex < remaining.Length)
+        {
+            AddTextOrImageSegments(segments, remaining[lastIndex..]);
+        }
+        else if (segments.Count == 0)
+        {
+            segments.Add(new Segment(SegmentType.Text, text));
+        }
+
+        return segments;
+    }
+
+    /// <summary>
+    /// Checks remaining text for standalone image URLs (bare URLs on their own line).
+    /// </summary>
+    private static void AddTextOrImageSegments(List<Segment> segments, string text)
+    {
+        var imgMatches = StandaloneImageUrlRegex.Matches(text);
+
+        if (imgMatches.Count == 0)
+        {
+            if (!string.IsNullOrEmpty(text))
+                segments.Add(new Segment(SegmentType.Text, text));
+            return;
+        }
+
+        var lastIndex = 0;
+        foreach (Match match in imgMatches)
+        {
+            if (match.Index > lastIndex)
+            {
+                var before = text[lastIndex..match.Index];
+                if (!string.IsNullOrWhiteSpace(before))
+                    segments.Add(new Segment(SegmentType.Text, before));
+            }
+
+            segments.Add(new Segment(SegmentType.Image, "", Url: match.Groups[1].Value, Alt: ""));
+            lastIndex = match.Index + match.Length;
+        }
+
+        if (lastIndex < text.Length)
+        {
+            var after = text[lastIndex..];
+            if (!string.IsNullOrWhiteSpace(after))
+                segments.Add(new Segment(SegmentType.Text, after));
+        }
+    }
+
+    /// <summary>
+    /// Converts basic markdown formatting to HTML.
+    /// Handles: **bold**, *italic*, newlines, and inline `code`.
+    /// HTML-encodes all other content for safety.
+    /// </summary>
+    private static string FormatText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return "";
+
+        // HTML-encode first for safety
+        var encoded = System.Net.WebUtility.HtmlEncode(text);
+
+        // Bold: **text**
+        encoded = Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+
+        // Italic: *text* (but not inside bold)
+        encoded = Regex.Replace(encoded, @"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", "<em>$1</em>");
+
+        // Inline code: `code`
+        encoded = Regex.Replace(encoded, @"`(.+?)`", "<code class=\"bg-stone-100 px-1 py-0.5 rounded text-xs font-mono\">$1</code>");
+
+        // Line breaks
+        encoded = encoded.Replace("\n", "<br />");
+
+        return encoded;
+    }
+}

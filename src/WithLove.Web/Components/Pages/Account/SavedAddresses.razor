@@ -1,0 +1,99 @@
+@page "/account/addresses"
+@attribute [Authorize]
+
+<PageTitle>Saved Addresses | With Love</PageTitle>
+
+<div class="min-h-[calc(100vh-6rem)] flex flex-col lg:flex-row">
+    <AccountSidebar ActivePage="addresses" />
+
+    <div class="flex-1 lg:ml-72 p-6 lg:p-16">
+        <div class="max-w-5xl mx-auto">
+            <!-- Page Header -->
+            <div class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-display text-stone-800 mb-2">Saved Addresses</h1>
+                    <p class="text-sm text-stone-400 font-light">Manage your shipping and billing destinations for a seamless checkout.</p>
+                </div>
+                <button class="flex items-center gap-2 px-8 py-3 rounded-full bg-stone-800 text-white text-xs font-bold uppercase tracking-widest hover:bg-primary transition-all duration-500 shadow-lg shadow-stone-200">
+                    <span class="material-symbols-outlined text-lg">add</span>
+                    Add New Address
+                </button>
+            </div>
+
+            <!-- Address Cards -->
+            <div class="space-y-6">
+                @foreach (var address in _addresses)
+                {
+                    <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-8 hover:shadow-xl hover:shadow-stone-100 transition-all duration-500 group">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div class="space-y-3 flex-1">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs uppercase tracking-widest font-semibold text-stone-400">@address.Label</span>
+                                    <span class="px-3 py-1 @address.BadgeStyle text-[10px] uppercase tracking-widest font-bold rounded-full">@address.TypeBadge</span>
+                                </div>
+                                <h3 class="font-display text-xl text-stone-800">@address.RecipientName</h3>
+                                <div class="space-y-0.5">
+                                    @foreach (var line in address.AddressLines)
+                                    {
+                                        <p class="text-sm text-stone-500 font-light">@line</p>
+                                    }
+                                </div>
+                            </div>
+                            <div class="hidden md:flex items-center justify-center px-12">
+                                <div class="w-12 h-12 rounded-full bg-stone-50 flex items-center justify-center text-stone-300 group-hover:text-primary transition-colors">
+                                    <span class="material-symbols-outlined text-2xl">@address.IconName</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button class="px-6 py-2.5 rounded-full border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-colors flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-base">edit</span> Edit
+                                </button>
+                                <button class="px-6 py-2.5 rounded-full border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-red-400 hover:border-red-100 transition-colors">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                                @if (address.IsDefault)
+                                {
+                                    <button class="px-6 py-2.5 rounded-full bg-stone-100 text-stone-400 text-xs font-bold uppercase tracking-widest cursor-default flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-base text-sage-green">check_circle</span> Default
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="px-6 py-2.5 rounded-full border border-stone-800 text-stone-800 text-xs font-bold uppercase tracking-widest hover:bg-stone-800 hover:text-white transition-all duration-300">
+                                        Set as Default
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Bottom CTA -->
+            <div class="mt-20 text-center space-y-4">
+                <p class="text-stone-400 text-sm font-light italic">"Home is where the heart is, and where memories begin."</p>
+                <a href="#" class="text-xs uppercase tracking-widest text-stone-500 hover:text-primary border-b border-stone-200 hover:border-primary transition-all pb-1">Need help? Contact our concierge</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<SavedAddress> _addresses =
+    [
+        new("Primary Address", "Home", "bg-sage-green/10 text-sage-green",
+            "Evelyn Rose Sterling",
+            ["248 Lavender Lane, Apt 4B", "Brooklyn, New York 11211", "United States"],
+            "home", true),
+
+        new("Secondary Address", "Work", "bg-clay/10 text-clay",
+            "Evelyn Rose Sterling",
+            ["450 Madison Avenue, 12th Floor", "New York, NY 10022", "United States"],
+            "business", false),
+
+        new("Gift Address", "Studio", "bg-primary/10 text-primary",
+            "The Bloom Collective",
+            ["12 Artistry Row, Suite 101", "Hudson, NY 12534", "United States"],
+            "palette", false)
+    ];
+}

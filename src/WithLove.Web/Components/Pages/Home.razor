@@ -1,0 +1,171 @@
+@page "/"
+@attribute [StreamRendering]
+@inject IProductService ProductService
+
+<PageTitle>With Love | Minimalist Gift Shop</PageTitle>
+
+@* Hero Section *@
+<section class="relative min-h-[90vh] flex items-center bg-stone-50 overflow-hidden">
+    <div class="absolute top-0 right-0 w-[60%] h-full bg-stone-100 organic-shape-1 opacity-60 translate-x-1/4 -translate-y-1/4"></div>
+    <div class="absolute bottom-0 left-0 w-[40%] h-[60%] bg-primary/5 organic-shape-2 opacity-50 -translate-x-1/4 translate-y-1/4"></div>
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 w-full relative z-10">
+        <div class="grid lg:grid-cols-2 gap-16 items-center">
+            <div class="order-2 lg:order-1 space-y-8">
+                <span class="inline-block text-earth-brown text-xs font-bold tracking-[0.2em] uppercase pl-1 border-l-2 border-primary">Minimalist Gifting</span>
+                <h1 class="text-6xl md:text-7xl lg:text-8xl font-display text-stone-800 leading-[0.9]">
+                    Expressions <br/>
+                    <span class="italic font-light text-primary">Beyond</span> <br/>
+                    Words
+                </h1>
+                <p class="text-lg text-stone-500 font-light max-w-md leading-relaxed">
+                    We believe that every gift is a chapter in your relationship. Discover curated collections that speak softer, yet deeper.
+                </p>
+                <div class="flex items-center gap-6 pt-4">
+                    <a class="flex items-center gap-2 text-stone-600 hover:text-primary transition-colors text-sm uppercase tracking-widest group" href="/collections/flora">
+                        Explore Shop
+                        <span class="material-symbols-outlined text-lg group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                    </a>
+                </div>
+            </div>
+            <div class="order-1 lg:order-2 relative h-[500px] lg:h-[700px] flex items-center justify-center">
+                <div class="relative w-full h-full">
+                    <div class="absolute top-10 right-10 w-64 h-64 bg-primary/20 rounded-full blur-3xl mix-blend-multiply"></div>
+                    <div class="absolute bottom-10 left-10 w-72 h-72 bg-earth-brown/10 rounded-full blur-3xl mix-blend-multiply"></div>
+                    <img alt="Elegant minimalist bouquet" class="relative z-10 w-full h-full object-cover rounded-[2rem] lg:rounded-organic shadow-2xl shadow-stone-200 grayscale-[20%] hover:grayscale-0 transition-all duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1eUtVySbrjZJwsn7WYr232qRZ0vRqSGdAgX-yCMlP54u2Tnp-LaFxazlal2JRYltiLPB6M7fJuTMtihOb9N7nU2Qj1r9yNqvMGaotLjd4gnNHtbNcERTMLzY5xq6pCc-r68dJmTeM0uMTAX-LFeTQP_RFzTvyTAIxxwmdz2Ve09iueAtiUoqSPpBC1PgMddY2ylX8IL5zph1eEOXOAg9qO6Hat8KEkLYLXR-RsoSK2Flf6Wb5B8pISf-ttu0uik9GKwvavDxuQm8" />
+                    <div class="absolute -bottom-8 -left-8 bg-white/90 backdrop-blur p-6 rounded-2xl shadow-lg max-w-xs z-20 hidden md:block">
+                        <p class="font-display text-lg text-stone-800 mb-2">"The Whisper"</p>
+                        <p class="text-xs text-stone-500 leading-relaxed">A gentle arrangement of dried florals and cream roses, perfect for quiet moments.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* Categories *@
+<section class="py-32 bg-stone-50">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        <div class="text-center mb-20">
+            <h2 class="text-3xl md:text-4xl font-display text-stone-800 mb-4">Curated by Nature</h2>
+            <div class="w-16 h-1 bg-primary mx-auto rounded-full opacity-50"></div>
+        </div>
+        @if (categories is not null)
+        {
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+                @{ var index = 0; }
+                @foreach (var cat in categories)
+                {
+                    var stagger = index % 2 != 0 ? "mt-12 md:mt-0" : "";
+                    <div class="@stagger">
+                        <CategoryCircle Category="cat" />
+                    </div>
+                    index++;
+                }
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+                @for (int i = 0; i < 6; i++)
+                {
+                    <div class="@(i % 2 != 0 ? "mt-12 md:mt-0" : "") flex flex-col items-center gap-4 animate-pulse">
+                        <div class="w-24 h-24 rounded-full bg-stone-200"></div>
+                        <div class="h-4 w-16 bg-stone-200 rounded"></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@* Featured Products *@
+<section class="py-20 bg-stone-100/50">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        @if (featuredProducts is not null)
+        {
+            <div class="mb-32">
+                @if (featuredProducts.Count > 0)
+                {
+                    <ProductCardFeatured Product="featuredProducts[0]" ImageOnLeft="true" />
+                }
+            </div>
+            @if (featuredProducts.Count > 1)
+            {
+                <ProductCardFeatured Product="featuredProducts[1]" ImageOnLeft="false" />
+            }
+        }
+        else
+        {
+            <div class="h-96 bg-stone-200 rounded-3xl animate-pulse mb-32"></div>
+            <div class="h-96 bg-stone-200 rounded-3xl animate-pulse"></div>
+        }
+    </div>
+</section>
+
+@* Small Luxuries *@
+<section class="py-24 bg-stone-50">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        <div class="flex justify-between items-end mb-16">
+            <div>
+                <h2 class="text-3xl md:text-4xl font-display text-stone-800">Small Luxuries</h2>
+                <p class="text-stone-500 mt-2 font-light">Thoughtful additions to perfect the moment.</p>
+            </div>
+            <a class="hidden md:flex items-center gap-2 text-primary hover:text-primary-dark transition-colors uppercase text-xs font-bold tracking-widest" href="/collections/flora">
+                View All
+            </a>
+        </div>
+        @if (smallLuxuries is not null)
+        {
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                @foreach (var product in smallLuxuries)
+                {
+                    <ProductCardGrid Product="product" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                @for (int i = 0; i < 3; i++)
+                {
+                    <div class="bg-stone-200 rounded-2xl h-80 animate-pulse"></div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@* Art of Giving CTA *@
+<section class="py-24 relative overflow-hidden">
+    <div class="absolute inset-0 bg-stone-200">
+        <img class="w-full h-full object-cover opacity-30 mix-blend-overlay" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1eUtVySbrjZJwsn7WYr232qRZ0vRqSGdAgX-yCMlP54u2Tnp-LaFxazlal2JRYltiLPB6M7fJuTMtihOb9N7nU2Qj1r9yNqvMGaotLjd4gnNHtbNcERTMLzY5xq6pCc-r68dJmTeM0uMTAX-LFeTQP_RFzTvyTAIxxwmdz2Ve09iueAtiUoqSPpBC1PgMddY2ylX8IL5zph1eEOXOAg9qO6Hat8KEkLYLXR-RsoSK2Flf6Wb5B8pISf-ttu0uik9GKwvavDxuQm8" alt="" />
+    </div>
+    <div class="max-w-4xl mx-auto px-6 relative z-10 text-center">
+        <div class="bg-white/90 backdrop-blur-xl p-12 md:p-16 rounded-[3rem]">
+            <span class="material-symbols-outlined text-4xl text-primary mb-6 font-light">card_giftcard</span>
+            <h2 class="text-4xl md:text-5xl font-display text-stone-800 mb-6">The Art of Giving</h2>
+            <p class="text-stone-600 text-lg font-light mb-10 leading-relaxed max-w-2xl mx-auto">
+                Not sure where to begin? Our concierge service helps you find the perfect expression of your feelings, wrapped in sustainable luxury.
+            </p>
+            <a href="/collections" class="inline-block bg-primary text-white hover:bg-primary-dark px-10 py-4 rounded-full font-bold transition-all shadow-lg shadow-primary/20">
+                Start Curating
+            </a>
+        </div>
+    </div>
+</section>
+
+@* Trust Badges *@
+<TrustBadges />
+
+@code {
+    private List<Product>? featuredProducts;
+    private List<Product>? smallLuxuries;
+    private List<Category>? categories;
+
+    protected override async Task OnInitializedAsync()
+    {
+        featuredProducts = await ProductService.GetFeaturedProductsAsync();
+        smallLuxuries = await ProductService.GetSmallLuxuriesAsync();
+        categories = await ProductService.GetCategoriesAsync();
+    }
+}

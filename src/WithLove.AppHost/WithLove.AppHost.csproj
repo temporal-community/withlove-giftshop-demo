@@ -1,0 +1,24 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <UserSecretsId>909fc674-6133-45e7-86cc-a46a15048bf4</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\WithLove.ProductsAPI\WithLove.ProductsAPI.csproj" />
+    <ProjectReference Include="..\WithLove.Web\WithLove.Web.csproj" />
+        <ProjectReference Include="..\WithLove.WorkflowServer\WithLove.WorkflowServer.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Aspire.Hosting.Redis" Version="13.0.2" />
+      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.2" />
+      <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.1.1" />
+      <PackageReference Include="Temporalio" Version="1.11.1" />
+    </ItemGroup>
+
+</Project>

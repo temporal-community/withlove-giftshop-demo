@@ -1,0 +1,17 @@
+@* CheckoutStepHeader.razor - Numbered step header for checkout form *@
+
+<div class="flex items-center gap-4 mb-6">
+    <div class="w-8 h-8 rounded-full bg-stone-800 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+        @StepNumber
+    </div>
+    <h2 class="font-display text-xl md:text-2xl text-stone-800">@Title</h2>
+    <div class="flex-1 h-px bg-stone-200"></div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int StepNumber { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = default!;
+}

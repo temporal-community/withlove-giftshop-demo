@@ -1,0 +1,234 @@
+@page "/register"
+@layout LoginLayout
+@using Microsoft.AspNetCore.Identity
+@using WithLove.Data.Models
+@using System.ComponentModel.DataAnnotations
+@using Temporalio.Client
+@using WithLove.Workflows
+@using WithLove.Workflows.Workflows
+@inject UserManager<ShopUser> UserManager
+@inject SignInManager<ShopUser> SignInManager
+@inject NavigationManager Navigation
+@inject ILogger<Register> Logger
+@inject ITemporalClient TemporalClient
+
+<PageTitle>Create Account | With Love</PageTitle>
+
+<div class="flex min-h-screen">
+    <!-- Left Panel - Brand -->
+    <div class="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-lavender-mist items-center justify-center p-16">
+        <div class="absolute inset-0 bg-grain mix-blend-multiply pointer-events-none"></div>
+        <div class="absolute inset-0 texture-overlay pointer-events-none"></div>
+        <div class="absolute top-0 right-0 w-full h-full bg-white/20 organic-shape-bg -translate-y-1/4 translate-x-1/4 blur-2xl"></div>
+        <div class="absolute bottom-0 left-0 w-3/4 h-3/4 bg-primary/5 organic-shape-1 translate-y-1/4 -translate-x-1/4 blur-xl"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-white/10 blur-[120px] rounded-full"></div>
+
+        <a class="absolute top-12 left-12 font-display text-2xl tracking-widest text-stone-800 flex items-center gap-2 group z-20" href="/">
+            <span class="material-symbols-outlined text-primary font-light text-2xl group-hover:scale-110 transition-transform">spa</span>
+            <span>with love</span>
+        </a>
+
+        <div class="relative z-10 w-full max-w-lg text-center space-y-12">
+            <div class="space-y-6">
+                <span class="text-[10px] uppercase tracking-[0.4em] text-primary-dark font-bold">Brand Philosophy</span>
+                <h2 class="text-5xl lg:text-6xl text-stone-800 leading-tight font-display italic">Essence of Grace</h2>
+                <div class="w-12 h-[1px] bg-primary mx-auto opacity-60"></div>
+                <p class="text-stone-600 font-light text-lg leading-relaxed max-w-md mx-auto font-sans">
+                    We curate experiences that honor the rhythm of the natural world. Our core values reside in the quiet strength of intentional design and the gentle beauty found in life's most fleeting moments.
+                </p>
+            </div>
+            <div class="grid grid-cols-3 gap-8 pt-8 border-t border-stone-800/10">
+                <div class="space-y-2">
+                    <span class="block font-display text-lg text-stone-800">Mindful</span>
+                    <span class="block text-[10px] uppercase tracking-widest text-stone-500">Creation</span>
+                </div>
+                <div class="space-y-2">
+                    <span class="block font-display text-lg text-stone-800">Organic</span>
+                    <span class="block text-[10px] uppercase tracking-widest text-stone-500">Growth</span>
+                </div>
+                <div class="space-y-2">
+                    <span class="block font-display text-lg text-stone-800">Pure</span>
+                    <span class="block text-[10px] uppercase tracking-widest text-stone-500">Intention</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel - Registration Form -->
+    <div class="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-16 relative">
+        <div class="w-full max-w-md space-y-8 relative z-10">
+            <!-- Mobile Logo -->
+            <div class="lg:hidden flex justify-center mb-8">
+                <a class="font-display text-2xl tracking-widest text-stone-800 flex items-center gap-2" href="/">
+                    <span class="material-symbols-outlined text-primary font-light text-2xl">spa</span>
+                    <span>with love</span>
+                </a>
+            </div>
+
+            <div class="text-center space-y-3">
+                <h1 class="text-4xl font-display text-stone-800">Join Our Community</h1>
+                <p class="text-stone-500 font-light italic">Create your new curator account</p>
+            </div>
+
+            @if (_errorMessages.Count > 0)
+            {
+                <div class="bg-red-50 border border-red-100 rounded-2xl px-6 py-4 text-sm text-red-600 font-light">
+                    <ul class="list-disc list-inside space-y-1">
+                        @foreach (var error in _errorMessages)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <EditForm Model="Input" FormName="register" OnValidSubmit="RegisterUser" method="post" class="space-y-5">
+                <DataAnnotationsValidator />
+
+                <div class="space-y-3">
+                    <div class="relative group">
+                        <label class="text-[10px] uppercase tracking-widest text-stone-400 font-bold ml-4 mb-1 block" for="fullName">Full Name</label>
+                        <InputText @bind-Value="Input!.FullName" id="fullName" placeholder="Jane Doe"
+                            class="w-full bg-white border-stone-200 rounded-full px-6 py-3.5 text-sm text-stone-700 placeholder-stone-300 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" />
+                        <ValidationMessage For="() => Input.FullName" class="text-xs text-red-400 ml-4 mt-1" />
+                    </div>
+                    <div class="relative group">
+                        <label class="text-[10px] uppercase tracking-widest text-stone-400 font-bold ml-4 mb-1 block" for="email">Email Address</label>
+                        <InputText @bind-Value="Input.Email" id="email" placeholder="hello@example.com" type="email"
+                            class="w-full bg-white border-stone-200 rounded-full px-6 py-3.5 text-sm text-stone-700 placeholder-stone-300 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" />
+                        <ValidationMessage For="() => Input.Email" class="text-xs text-red-400 ml-4 mt-1" />
+                    </div>
+                    <div class="relative group">
+                        <label class="text-[10px] uppercase tracking-widest text-stone-400 font-bold ml-4 mb-1 block" for="password">Password</label>
+                        <InputText @bind-Value="Input.Password" id="password" placeholder="••••••••" type="password"
+                            class="w-full bg-white border-stone-200 rounded-full px-6 py-3.5 text-sm text-stone-700 placeholder-stone-300 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" />
+                        <ValidationMessage For="() => Input.Password" class="text-xs text-red-400 ml-4 mt-1" />
+                    </div>
+                    <div class="relative group">
+                        <label class="text-[10px] uppercase tracking-widest text-stone-400 font-bold ml-4 mb-1 block" for="confirmPassword">Confirm Password</label>
+                        <InputText @bind-Value="Input.ConfirmPassword" id="confirmPassword" placeholder="••••••••" type="password"
+                            class="w-full bg-white border-stone-200 rounded-full px-6 py-3.5 text-sm text-stone-700 placeholder-stone-300 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" />
+                        <ValidationMessage For="() => Input.ConfirmPassword" class="text-xs text-red-400 ml-4 mt-1" />
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-stone-800 text-stone-50 py-4 rounded-full text-sm uppercase tracking-widest font-bold hover:bg-primary transition-all duration-300 shadow-lg shadow-stone-200 transform active:scale-[0.98]">
+                    Create Account
+                </button>
+
+                <div class="relative py-2">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-stone-100"></div>
+                    </div>
+                    <div class="relative flex justify-center text-xs uppercase tracking-[0.2em]">
+                        <span class="bg-stone-50 px-4 text-stone-400">or join with</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <button type="button" disabled class="flex items-center justify-center gap-3 py-3 border border-stone-200 rounded-full opacity-50 cursor-not-allowed">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+                        </svg>
+                        <span class="text-xs font-semibold text-stone-400">Google</span>
+                    </button>
+                    <button type="button" disabled class="flex items-center justify-center gap-3 py-3 border border-stone-200 rounded-full opacity-50 cursor-not-allowed">
+                        <svg class="w-4 h-4 text-stone-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"></path>
+                        </svg>
+                        <span class="text-xs font-semibold text-stone-400">Github</span>
+                    </button>
+                </div>
+            </EditForm>
+
+            <div class="text-center pt-4">
+                <p class="text-sm text-stone-500 font-light">
+                    Already have an account?
+                    <a class="text-primary font-bold hover:text-primary-dark transition-colors ml-1"
+                       href="@($"/login{(!string.IsNullOrEmpty(ReturnUrl) ? $"?returnUrl={Uri.EscapeDataString(ReturnUrl)}" : "")}")">Sign In</a>
+                </p>
+            </div>
+        </div>
+
+        <div class="absolute top-20 right-20 w-32 h-32 bg-primary/10 rounded-full blur-3xl -z-10"></div>
+        <div class="absolute bottom-20 left-20 w-48 h-48 bg-clay/5 rounded-full blur-3xl -z-10"></div>
+    </div>
+</div>
+
+<!-- Back to shop -->
+<a class="fixed bottom-12 right-12 text-stone-400 hover:text-stone-800 transition-colors flex items-center gap-2 group z-50" href="/">
+    <span class="text-[10px] uppercase tracking-widest font-bold border-b border-transparent group-hover:border-stone-800 transition-all">Back to shop</span>
+    <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+
+@code {
+    private readonly List<string> _errorMessages = [];
+
+    [SupplyParameterFromForm]
+    private RegisterInput? Input { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Input ??= new();
+    }
+
+    private async Task RegisterUser()
+    {
+        _errorMessages.Clear();
+
+        var user = new ShopUser();
+        await UserManager.SetUserNameAsync(user, Input!.Email);
+        await UserManager.SetEmailAsync(user, Input.Email);
+
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User {Email} created a new account.", Input.Email);
+            
+            //Todo: consider moving this to a background service that listens on a channel, to decouple it from the registration flow and improve performance
+            await TemporalClient.StartWorkflowAsync((CustomerOnboardingWorkflow wf) => wf.RunAsync(new(Input.FullName, Input.Email)),
+                new WorkflowOptions($"customer-onboarding-{Input.Email}", WorkflowConstants.DefaultTaskQueue)
+            {
+                IdReusePolicy = Temporalio.Api.Enums.V1.WorkflowIdReusePolicy.RejectDuplicate
+            });
+            
+            await SignInManager.SignInAsync(user, isPersistent: false);
+            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        else
+        {
+            foreach (var error in result.Errors)
+            {
+                _errorMessages.Add(error.Description);
+            }
+            Logger.LogWarning("Failed registration attempt for {Email}: {Errors}",
+                Input.Email, string.Join("; ", _errorMessages));
+        }
+    }
+
+    private sealed class RegisterInput
+    {
+        [Required(ErrorMessage = "Full name is required.")]
+        [StringLength(100, ErrorMessage = "Name cannot exceed 100 characters.")]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Please enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is required.")]
+        [StringLength(100, MinimumLength = 4, ErrorMessage = "Password must be at least 4 characters.")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Please confirm your password.")]
+        [Compare("Password", ErrorMessage = "Passwords do not match.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

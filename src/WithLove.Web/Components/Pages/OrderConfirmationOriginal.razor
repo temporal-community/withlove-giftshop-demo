@@ -1,0 +1,117 @@
+@page "/order-confirmed"
+@rendermode InteractiveServer
+@inject ICartService CartService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Stripe.StripeClient StripeClient
+@inject AnonymousCartSession AnonSession
+@using Microsoft.AspNetCore.WebUtilities
+
+@* --------------------------------------------------------------------------- *@
+@*   CURRENTLY NOT IN USE - SEE OrderConfirmation.razor FOR THE FINAL VERSION  *@
+@* --------------------------------------------------------------------------- *@
+
+<PageTitle>Order Confirmed | With Love</PageTitle>
+
+<div class="bg-white border-b border-stone-200">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-5 flex items-center justify-between">
+        <a href="/" class="font-display text-2xl text-stone-800">With Love</a>
+    </div>
+</div>
+
+<section class="py-16 md:py-24 bg-stone-50 min-h-[70vh]">
+    <div class="max-w-xl mx-auto px-6 text-center">
+        @if (isLoading)
+        {
+            <div class="flex items-center justify-center gap-2 py-12 text-stone-400">
+                <span class="material-symbols-outlined text-2xl animate-spin">progress_activity</span>
+                <span class="text-lg font-light">Verifying your order...</span>
+            </div>
+        }
+        else if (paymentVerified)
+        {
+            <div class="bg-white rounded-2xl border border-stone-200 p-8 md:p-12">
+                <div class="w-16 h-16 mx-auto mb-6 rounded-full bg-sage-green/20 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-3xl text-sage-green">check_circle</span>
+                </div>
+
+                <h1 class="font-display text-3xl md:text-4xl text-stone-800 mb-3">Thank You</h1>
+                <p class="text-stone-500 font-light mb-8">Your gift is on its way to making someone's day.</p>
+
+                @if (!string.IsNullOrEmpty(customerEmail))
+                {
+                    <div class="bg-stone-50 rounded-xl p-4 mb-8 text-sm text-stone-600">
+                        <p>A confirmation has been sent to <span class="font-medium text-stone-800">@customerEmail</span></p>
+                    </div>
+                }
+
+                <a href="/"
+                   class="inline-flex items-center gap-2 bg-stone-800 text-white px-8 py-3 rounded-full font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all">
+                    <span class="material-symbols-outlined text-base">storefront</span>
+                    <span>Continue Shopping</span>
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="bg-white rounded-2xl border border-stone-200 p-8 md:p-12">
+                <div class="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-3xl text-red-400">error</span>
+                </div>
+
+                <h1 class="font-display text-2xl text-stone-800 mb-3">Something Went Wrong</h1>
+                <p class="text-stone-500 font-light mb-8">@errorMessage</p>
+
+                <a href="/checkout"
+                   class="inline-flex items-center gap-2 bg-stone-800 text-white px-8 py-3 rounded-full font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all">
+                    <span class="material-symbols-outlined text-base">arrow_back</span>
+                    <span>Return to Checkout</span>
+                </a>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private bool isLoading = true;
+    private bool paymentVerified;
+    private string? customerEmail;
+    private string errorMessage = "We couldn't verify your payment. Please contact support if you were charged.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CartService.InitializeFromAuthAsync(AuthStateProvider, AnonSession);
+
+        var uri = new Uri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+
+        if (!query.TryGetValue("session_id", out var sessionId) || string.IsNullOrEmpty(sessionId))
+        {
+            errorMessage = "No order session found. Please return to checkout.";
+            isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var session = await StripeClient.V1.Checkout.Sessions.GetAsync(sessionId!);
+
+            if (session.PaymentStatus == "paid")
+            {
+                paymentVerified = true;
+                customerEmail = session.CustomerDetails?.Email;
+                await CartService.ClearAsync();
+            }
+            else
+            {
+                errorMessage = "Your payment has not been completed. Please try again.";
+            }
+        }
+        catch (Stripe.StripeException)
+        {
+            errorMessage = "We couldn't verify your payment. Please contact support if you were charged.";
+        }
+
+        isLoading = false;
+    }
+}

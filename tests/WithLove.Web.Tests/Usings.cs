@@ -1,0 +1,14 @@
+global using System;
+global using System.Collections.Generic;
+global using System.Linq;
+global using System.Net;
+global using System.Net.Http;
+global using System.Text.Json;
+global using System.Threading.Tasks;
+global using FakeItEasy;
+global using FluentAssertions;
+global using Microsoft.Extensions.Logging;
+global using Xunit;
+global using WithLove.Web.Models;
+global using WithLove.Web.Services;
+global using WithLove.Web.Tests.Traits;

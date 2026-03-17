@@ -1,0 +1,170 @@
+@rendermode InteractiveServer
+@inject IProductService ProductService
+@implements IDisposable
+
+<!-- Trigger Button -->
+<button @onclick="Open" class="text-stone-600 hover:text-primary transition-colors">
+    <span class="material-symbols-outlined font-light text-xl">search</span>
+</button>
+
+<!-- Search Overlay -->
+@if (_isOpen)
+{
+    <div class="fixed inset-0 z-[100] bg-stone-900/60 backdrop-blur-sm" @onclick="Close"></div>
+    <div class="fixed inset-x-0 top-0 z-[101] bg-white shadow-2xl" @onclick:stopPropagation="true">
+        <div class="max-w-3xl mx-auto px-6 py-8">
+            <!-- Search Input -->
+            <div class="flex items-center gap-4 mb-6">
+                <div class="relative flex-1">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 text-xl">search</span>
+                    <input type="text"
+                           @bind="_query"
+                           @bind:event="oninput"
+                           @bind:after="OnQueryChanged"
+                           @onkeydown="OnKeyDown"
+                           class="w-full pl-12 pr-4 py-4 bg-stone-50 border border-stone-200 rounded-xl text-lg text-stone-800 placeholder-stone-400 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all font-body"
+                           placeholder="Search for gifts..."/>
+                </div>
+                <button @onclick="Close"
+                        class="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-full transition-colors">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+
+            <!-- Results -->
+            <div class="max-h-[60vh] overflow-y-auto">
+                @if (_isSearching)
+                {
+                    <div class="flex items-center justify-center py-12">
+                        <div
+                            class="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <span class="ml-3 text-stone-500 font-body text-sm">Searching...</span>
+                    </div>
+                }
+                else if (_hasSearched && _results.Count == 0)
+                {
+                    <div class="text-center py-12">
+                        <span class="material-symbols-outlined text-4xl text-stone-300 mb-2 block">search_off</span>
+                        <p class="text-stone-500 font-body">No results found for "<strong>@_query</strong>"</p>
+                        <p class="text-stone-400 font-body text-sm mt-1">Try a different search term</p>
+                    </div>
+                }
+                else if (_results.Count > 0)
+                {
+                    <div class="grid gap-3">
+                        @foreach (var product in _results.Take(5))
+                        {
+                            <a href="/product/@product.Id"
+                               @onclick="Close"
+                               class="flex items-center gap-4 p-3 rounded-xl hover:bg-stone-50 transition-colors group">
+                                @if (!string.IsNullOrEmpty(product.ImageUrl))
+                                {
+                                    <img src="@product.ImageUrl" alt="@product.Name"
+                                         class="w-16 h-16 rounded-lg object-cover flex-shrink-0"/>
+                                }
+                                else
+                                {
+                                    <div
+                                        class="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">
+                                        <span class="material-symbols-outlined text-stone-300">image</span>
+                                    </div>
+                                }
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-display text-stone-800 group-hover:text-primary transition-colors truncate">@product.Name</h4>
+                                    <p class="text-sm text-stone-500 font-body truncate">@(product.SubCategory ?? "Gift")</p>
+                                </div>
+                                <span class="font-body text-stone-700 font-medium">$@product.Price.ToString("F2")</span>
+                            </a>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-8">
+                        <span class="material-symbols-outlined text-4xl text-stone-200 mb-2 block">spa</span>
+                        <p class="text-stone-400 font-body text-sm">Start typing to find the perfect gift</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isOpen;
+    private string _query = string.Empty;
+    private List<Product> _results = [];
+    private bool _isSearching;
+    private bool _hasSearched;
+    private CancellationTokenSource? _debounceCts;
+
+    private void Open()
+    {
+        _isOpen = true;
+        _query = string.Empty;
+        _results = [];
+        _hasSearched = false;
+        _isSearching = false;
+    }
+
+    private void Close()
+    {
+        _isOpen = false;
+        DisposeCts();
+    }
+
+    private async Task OnQueryChanged()
+    {
+        DisposeCts();
+
+        if (string.IsNullOrWhiteSpace(_query))
+        {
+            _results = [];
+            _hasSearched = false;
+            return;
+        }
+
+        if (_query.Length < 2)
+            return;
+
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+            _isSearching = true;
+            StateHasChanged();
+
+            _results = await ProductService.SearchProductsAsync(_query, token);
+            _hasSearched = true;
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            Close();
+    }
+
+    private void DisposeCts()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        _debounceCts = null;
+    }
+
+    public void Dispose()
+    {
+        DisposeCts();
+    }
+
+}

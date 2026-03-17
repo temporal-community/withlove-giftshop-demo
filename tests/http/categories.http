@@ -1,0 +1,37 @@
+# WithLove Products API — Categories (read-only)
+#
+# Categories are seeded by the WorkflowServer on startup.
+# Admin operations (create/update/delete) are out of scope for this API.
+
+@baseUrl = https://localhost:7001
+@apiVersion = 2026-02-25
+
+### List all categories
+GET {{baseUrl}}/api/categories
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+
+### List categories — paginated
+GET {{baseUrl}}/api/categories?top=3&skip=0
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+
+### Get category by ID
+# @name category
+GET {{baseUrl}}/api/categories/1
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+
+### Get category — not found (expects 404)
+GET {{baseUrl}}/api/categories/99999
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+
+### Get category with If-None-Match → 304 Not Modified (use ETag from previous response)
+GET {{baseUrl}}/api/categories/1
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+If-None-Match: {{category.response.headers.ETag}}
+
+### Get category with stale If-None-Match → 200 OK
+GET {{baseUrl}}/api/categories/1
+X-WITHLOVE-API-VERSION: {{apiVersion}}
+If-None-Match: W/"AAAAAAAAAAAAAAAAAAAAAA=="
+
+### Missing API version header (expects 400)
+GET {{baseUrl}}/api/categories

@@ -1,0 +1,40 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-0 group">
+    @if (ImageOnLeft)
+    {
+        <div class="relative overflow-hidden h-[600px] order-1 md:order-1 rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none">
+            <img alt="@Product.Name" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" src="@Product.ImageUrl" />
+            <div class="absolute inset-0 bg-black/10"></div>
+        </div>
+        @ProductInfo
+    }
+    else
+    {
+        @ProductInfo
+        <div class="relative overflow-hidden h-[600px] order-1 md:order-2 rounded-t-2xl md:rounded-r-2xl md:rounded-tl-none">
+            <img alt="@Product.Name" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" src="@Product.ImageUrl" />
+            <div class="absolute inset-0 bg-black/10"></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Product Product { get; set; } = default!;
+    [Parameter] public bool ImageOnLeft { get; set; } = true;
+
+    private string InfoOrder => ImageOnLeft ? "order-2 md:order-2 rounded-b-2xl md:rounded-r-2xl md:rounded-bl-none" : "order-2 md:order-1 rounded-b-2xl md:rounded-l-2xl md:rounded-br-none";
+
+    private RenderFragment ProductInfo => __builder =>
+    {
+        <div class="bg-white p-12 lg:p-20 flex flex-col justify-center items-start @InfoOrder shadow-sm">
+            <span class="text-xs font-bold text-primary uppercase tracking-widest mb-4">@Product.SubCategory</span>
+            <h3 class="text-4xl font-display text-stone-800 mb-6">@Product.Name</h3>
+            <p class="text-stone-500 leading-relaxed mb-8 font-light text-lg">@Product.Description</p>
+            <div class="flex items-center justify-between w-full border-t border-stone-100 pt-8">
+                <span class="text-2xl font-display text-stone-800">@Product.Price.ToString("C")</span>
+                <a href="/product/@Product.Id" class="flex items-center gap-2 text-stone-800 hover:text-primary transition-colors uppercase text-xs font-bold tracking-wider">
+                    View Details <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </a>
+            </div>
+        </div>
+    };
+}

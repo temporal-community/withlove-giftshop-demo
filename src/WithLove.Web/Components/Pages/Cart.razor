@@ -1,0 +1,155 @@
+@page "/cart"
+@rendermode InteractiveServer
+@inject ICartService CartService
+@inject IProductService ProductService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AnonymousCartSession AnonSession
+
+<PageTitle>Your Selection | With Love</PageTitle>
+
+@* Page Header *@
+<div class="bg-stone-50 border-b border-stone-200">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-6">
+        <Breadcrumb Items="@(new List<BreadcrumbItem> { new BreadcrumbItem("Home", "/"), new BreadcrumbItem("Shopping Cart", null) })" />
+        <h1 class="font-display text-3xl md:text-4xl text-stone-800 mt-3">Your Selection</h1>
+        @if (CartService.ItemCount > 0)
+        {
+            <p class="text-stone-400 font-light text-sm mt-1">@CartService.ItemCount item@(CartService.ItemCount != 1 ? "s" : "") in your cart</p>
+        }
+    </div>
+</div>
+
+<section class="py-12 md:py-16 bg-stone-50 min-h-[60vh]">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        @if (!CartService.Items.Any())
+        {
+            @* Empty state *@
+            <div class="flex flex-col items-center justify-center py-24 text-center">
+                <span class="material-symbols-outlined text-6xl text-stone-300 mb-6">shopping_bag</span>
+                <h2 class="font-display text-2xl text-stone-700 mb-3">Your cart is empty</h2>
+                <p class="text-stone-500 font-light max-w-sm mb-8">Discover our curated collections and find something truly special.</p>
+                <a href="/collections"
+                   class="bg-stone-800 text-stone-50 px-8 py-4 rounded-full text-sm uppercase tracking-wider hover:bg-primary transition-colors shadow-md shadow-stone-200">
+                    Explore Collections
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="grid lg:grid-cols-3 gap-10 xl:gap-16 items-start">
+
+                @* Cart Items (2/3 width) *@
+                <div class="lg:col-span-2 space-y-0">
+
+                    @* Items list *@
+                    <div class="bg-white rounded-2xl border border-stone-200 px-6 mb-8">
+                        @foreach (var item in CartService.Items)
+                        {
+                            <CartItemRow Item="item"
+                                         OnQuantityChanged="HandleQuantityChange"
+                                         OnRemove="HandleRemove" />
+                        }
+                    </div>
+
+                    @* Gift Enhancements *@
+                    <div class="bg-white rounded-2xl border border-stone-200 p-6">
+                        <div class="flex items-center gap-3 mb-6">
+                            <span class="material-symbols-outlined text-xl text-primary">redeem</span>
+                            <h2 class="font-display text-xl text-stone-800">Gift Enhancements</h2>
+                        </div>
+                        <p class="text-stone-500 text-sm font-light mb-6">Elevate your gift with a special finishing touch.</p>
+                        @if (enhancements is not null && enhancements.Any())
+                        {
+                            <div class="grid sm:grid-cols-2 gap-4">
+                                @foreach (var enhancement in enhancements)
+                                {
+                                    <GiftEnhancementCard Enhancement="enhancement"
+                                                         OnToggle="HandleEnhancementToggle" />
+                                }
+                            </div>
+                        }
+                        else if (enhancements is null)
+                        {
+                            <div class="grid sm:grid-cols-2 gap-4">
+                                <div class="h-24 bg-stone-100 rounded-2xl animate-pulse"></div>
+                                <div class="h-24 bg-stone-100 rounded-2xl animate-pulse"></div>
+                            </div>
+                        }
+                    </div>
+
+                    @* Continue shopping *@
+                    <div class="mt-6">
+                        <a href="/collections/flora"
+                           class="inline-flex items-center gap-2 text-stone-500 hover:text-primary transition-colors text-sm">
+                            <span class="material-symbols-outlined text-base">arrow_back</span>
+                            Continue Shopping
+                        </a>
+                    </div>
+                </div>
+
+                @* Order Summary (1/3 width) *@
+                <div class="lg:col-span-1">
+                    <OrderSummarySidebar Subtotal="CartService.Subtotal"
+                                         EnhancementsTotal="CartService.EnhancementsTotal"
+                                         Total="CartService.Total" />
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private List<GiftEnhancement>? enhancements;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CartService.OnChange += StateHasChanged;
+        await CartService.InitializeFromAuthAsync(AuthStateProvider, AnonSession);
+        enhancements = await ProductService.GetGiftEnhancementsAsync();
+
+        // Sync enhancement selection state from cart service
+        if (enhancements is not null)
+        {
+            foreach (var enhancement in enhancements)
+            {
+                enhancement.IsSelected = CartService.Enhancements.Any(e => e.Id == enhancement.Id);
+            }
+        }
+    }
+
+    private async Task HandleQuantityChange((int ProductId, int Quantity) args)
+    {
+        if (args.Quantity <= 0)
+        {
+            await CartService.RemoveItemAsync(args.ProductId);
+        }
+        else
+        {
+            await CartService.UpdateQuantityAsync(args.ProductId, args.Quantity);
+        }
+    }
+
+    private async Task HandleRemove(int productId)
+    {
+        await CartService.RemoveItemAsync(productId);
+    }
+
+    private async Task HandleEnhancementToggle(GiftEnhancement enhancement)
+    {
+        await CartService.ToggleEnhancementAsync(enhancement);
+        // Update local selected state
+        if (enhancements is not null)
+        {
+            var local = enhancements.FirstOrDefault(e => e.Id == enhancement.Id);
+            if (local is not null)
+            {
+                local.IsSelected = CartService.Enhancements.Any(e => e.Id == enhancement.Id);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        CartService.OnChange -= StateHasChanged;
+    }
+}

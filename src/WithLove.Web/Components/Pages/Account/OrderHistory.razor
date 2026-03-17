@@ -1,0 +1,91 @@
+@page "/account/orders"
+@attribute [Authorize]
+
+<PageTitle>Order History | With Love</PageTitle>
+
+<div class="min-h-[calc(100vh-6rem)] flex flex-col lg:flex-row">
+    <AccountSidebar ActivePage="orders" />
+
+    <div class="flex-1 lg:ml-72 p-6 lg:p-16">
+        <div class="max-w-5xl mx-auto">
+            <!-- Page Header -->
+            <div class="mb-12">
+                <h1 class="text-3xl md:text-4xl font-display text-stone-800 mb-2">Order History</h1>
+                <p class="text-sm text-stone-400 font-light">View and manage your recent purchases and gift selections.</p>
+            </div>
+
+            <!-- Order Cards -->
+            <div class="space-y-6">
+                @foreach (var order in _orders)
+                {
+                    <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-8 hover:shadow-xl hover:shadow-stone-100 transition-all duration-500 group">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs uppercase tracking-widest font-semibold text-stone-400">Order #@order.OrderNumber</span>
+                                    <span class="px-3 py-1 @order.StatusStyle text-[10px] uppercase tracking-widest font-bold rounded-full">@order.Status</span>
+                                </div>
+                                <h3 class="font-display text-xl text-stone-800">Placed on @order.DatePlaced</h3>
+                                <p class="text-sm text-stone-500 font-light">Total: <span class="font-semibold text-stone-800">@order.Total.ToString("C")</span></p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="flex -space-x-4 overflow-hidden">
+                                    @foreach (var thumb in order.Thumbnails)
+                                    {
+                                        <div class="inline-block h-16 w-16 rounded-2xl ring-4 ring-white bg-stone-100 overflow-hidden relative">
+                                            <img alt="@thumb.AltText" class="h-full w-full object-cover" src="@thumb.ImageUrl" />
+                                        </div>
+                                    }
+                                    @if (order.ExtraItemCount > 0)
+                                    {
+                                        <div class="inline-block h-16 w-16 rounded-2xl ring-4 ring-white bg-stone-200 flex items-center justify-center">
+                                            <span class="text-xs font-medium text-stone-600">+@order.ExtraItemCount</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <button class="px-6 py-2.5 rounded-full border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-colors">Details</button>
+                                <button class="px-6 py-2.5 rounded-full @order.PrimaryActionStyle text-xs font-bold uppercase tracking-widest transition-all duration-300">@order.PrimaryAction</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Bottom CTA -->
+            <div class="mt-20 text-center space-y-4">
+                <p class="text-stone-400 text-sm font-light italic">"Memories are the most beautiful gifts we give."</p>
+                <a href="/collections" class="text-xs uppercase tracking-widest text-stone-500 hover:text-primary border-b border-stone-200 hover:border-primary transition-all pb-1">Browse our Latest Collections</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<OrderHistoryItem> _orders =
+    [
+        new("WL-8492", "Delivered", "bg-sage-green/10 text-sage-green",
+            "June 12, 2024", 309.00m,
+            [
+                new("https://lh3.googleusercontent.com/aida-public/AB6AXuBEB2L2RU7IQvQxpGwKCwE372ksSH0gEuSestVACG4TcNIMQNIfnzwapakiX5r_a_HhX4KSBqpFEzof_5Nsc6AkoWHQluJvmGS0iJifhuqOG6bZvR7v8j7giZCmICJ6RVtcIA86Vdg110gX99dnuzZdE8bXu2LbhAsFD93KuchfwYjWaY2BZKwgUN5rKvDCAly9EzDBKHIXp-r1NwMaKhtsKL_s5hn2tSdDz_ODRPeSzbGYQjnZiGGVmHyNROvYP1GY9O5vutjtJdw", "Velvet Crimson Roses"),
+                new("https://lh3.googleusercontent.com/aida-public/AB6AXuDWe8gFDpufP9975uuOWIUWA71Sm6HJ9jpna4sYrO8WrCd9hRMgbOhS_FBWX5RHw4NovK6Y65KezDfGO6J5WPERqpGyzFd0cM3pCQB08NHUZKm7p7dA4wmzPL3GrYueJwhjBMW56tUc7cxwAtDcV4a-UD5JjhKt7qWsAhXBELhZ5bA9M8XKqa4mVATrdtQn2O6SFkljvWtre0d6vtgs17qGFUkF_FsvS5eniGzYffFOXAFZLcSHw2d36Q0nMelfQFDkTH5S4qU4Tos", "Starlight Pendant")
+            ],
+            1, "Track", "bg-stone-800 text-white hover:bg-primary shadow-sm"),
+
+        new("WL-7210", "Delivered", "bg-stone-100 text-stone-500",
+            "April 28, 2024", 145.00m,
+            [
+                new("https://lh3.googleusercontent.com/aida-public/AB6AXuA2Jvkxj-W1d-XP7jitQiaUO1LQyuI379et-WkWDDWVcxE6h4rjmqrYOpzqy75IwWGUqxmuutuB7r31NXGgYcWlMtZDAo4PBs_ray1I47Er54-4LT9O4zgZ_GyJB5D4NyV59s0nAtU3CmQyp2WVbM_nJSdIMTdyBbO2TzjjXo8bwGHt3vEVvwS_P_7cR43gvCDW1Y7Qi-CHxGSnFnRklBuQATNFy0SXoyiJc5RvxxT29GH44EzsCdcjqGz366NmAeW1OL2up43JNOY", "Gift Wrapping")
+            ],
+            0, "Reorder", "border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white"),
+
+        new("WL-6501", "Delivered", "bg-stone-100 text-stone-500",
+            "March 15, 2024", 89.00m,
+            [
+                new("https://lh3.googleusercontent.com/aida-public/AB6AXuCXOMgfLAN299HXnFTq5MqxB_JFn9gIPvH2gwpSxwJ1jFNAnV7L4a10lo-nKWnD77PQUZ2JjaMh05XAhwY2a8uGuG9ntK79BgnoaQ7hQzdApuMtvig_v0H-4_7bNQ2eIRmW1qk1B5iJycrwhQlDg1A-p6ivT99YOhCNHkTwWS-VakfewSowim9jinZdq9JVt_V-EBoefcoBGuJBCg5Y5uXdSP4socWkyXbGmwTGjZPvwxgpAR2pGDUsdntMt0HHpPcxNzozVtyz5dI", "Greeting Card"),
+                new("https://lh3.googleusercontent.com/aida-public/AB6AXuBEB2L2RU7IQvQxpGwKCwE372ksSH0gEuSestVACG4TcNIMQNIfnzwapakiX5r_a_HhX4KSBqpFEzof_5Nsc6AkoWHQluJvmGS0iJifhuqOG6bZvR7v8j7giZCmICJ6RVtcIA86Vdg110gX99dnuzZdE8bXu2LbhAsFD93KuchfwYjWaY2BZKwgUN5rKvDCAly9EzDBKHIXp-r1NwMaKhtsKL_s5hn2tSdDz_ODRPeSzbGYQjnZiGGVmHyNROvYP1GY9O5vutjtJdw", "Velvet Crimson Roses")
+            ],
+            0, "Reorder", "border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white")
+    ];
+}

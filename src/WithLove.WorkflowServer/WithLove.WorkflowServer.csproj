@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1"/>
+        <PackageReference Include="Temporalio.Extensions.DiagnosticSource" Version="1.11.1" />
+        <PackageReference Include="Temporalio.Extensions.Hosting" Version="1.11.1" />
+        <PackageReference Include="Temporalio.Extensions.OpenTelemetry" Version="1.11.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\WithLove.Data\WithLove.Data.csproj" />
+      <ProjectReference Include="..\WithLove.ServiceDefaults\WithLove.ServiceDefaults.csproj" />
+      <ProjectReference Include="..\WithLove.Workflows\WithLove.Workflows.csproj" />
+    </ItemGroup>
+
+</Project>

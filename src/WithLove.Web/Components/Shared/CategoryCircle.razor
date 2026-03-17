@@ -1,0 +1,11 @@
+<a class="group flex flex-col items-center gap-4" href="/collections/@Category.Id">
+    <div class="w-32 h-40 rounded-full overflow-hidden relative shadow-md group-hover:shadow-xl transition-all duration-500">
+        <div class="absolute inset-0 bg-stone-900/10 group-hover:bg-transparent transition-colors z-10"></div>
+        <img alt="@Category.Name" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" src="@Category.Image" />
+    </div>
+    <span class="font-display text-stone-600 group-hover:text-primary transition-colors">@Category.Name</span>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public Category Category { get; set; } = default!;
+}

@@ -1,0 +1,222 @@
+@rendermode InteractiveServer
+@inject ChatService ChatService
+@inject IJSRuntime JS
+
+@if (!_isOpen)
+{
+    <!-- FAB pill button -->
+    <button class="fixed bottom-8 right-8 z-[90] flex items-center gap-3 bg-white pl-5 pr-6 py-4 rounded-full shadow-xl shadow-stone-200 cursor-pointer hover:bg-stone-50 transition-all duration-300 group border border-stone-100 hover:border-primary/30"
+            @onclick="OpenChat">
+        <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+        </span>
+        <span class="text-stone-800 font-display font-medium text-sm tracking-wide group-hover:text-primary transition-colors">Chat with Love</span>
+        <span class="material-symbols-outlined text-primary">favorite</span>
+    </button>
+}
+else
+{
+    <!-- Chat panel -->
+    <div class="fixed bottom-8 right-8 z-[90] w-96 bg-stone-50 rounded-2xl shadow-2xl shadow-stone-300 border border-primary/20 overflow-hidden flex flex-col"
+         style="max-height: calc(100vh - 6rem);">
+
+        <!-- Header -->
+        <div class="bg-white p-4 border-b border-stone-100 flex items-center justify-between bg-gradient-to-r from-white to-stone-50">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-xl">auto_awesome</span>
+                <h3 class="font-display text-stone-800 font-medium">Love Assistant</h3>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (ChatService.Messages.Count > 0)
+                {
+                    <button class="cursor-pointer hover:bg-stone-100 rounded-full p-1 transition-colors flex items-center justify-center"
+                            @onclick="EndChat" title="End chat session">
+                        <span class="material-symbols-outlined text-stone-400 hover:text-stone-600 text-lg">delete_sweep</span>
+                    </button>
+                }
+                <button class="cursor-pointer hover:bg-stone-100 rounded-full p-1 transition-colors flex items-center justify-center"
+                        @onclick="CloseChat">
+                    <span class="material-symbols-outlined text-stone-400 hover:text-stone-600 text-lg">close</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="h-96 p-4 overflow-y-auto no-scrollbar flex flex-col gap-4" @ref="_messagesContainer">
+            @if (ChatService.Messages.Count == 0 && !ChatService.IsThinking)
+            {
+                <!-- Welcome message + quick actions -->
+                <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                        <span class="material-symbols-outlined text-primary text-sm">spa</span>
+                    </div>
+                    <div class="space-y-3 max-w-[85%]">
+                        <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-stone-100 shadow-sm text-sm text-stone-600 leading-relaxed">
+                            Hey there! I'm LA, your personal gift guide. Tell me who you're shopping for and I'll help you find something they'll absolutely love.
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
+                                    @onclick="() => SendQuickAction(QuickActionRomantic)">Romantic Gift</button>
+                            <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
+                                    @onclick="() => SendQuickAction(QuickActionSympathy)">Sympathy</button>
+                            <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
+                                    @onclick="() => SendQuickAction(QuickActionJustBecause)">Just Because</button>
+                            <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
+                                    @onclick="() => SendQuickAction(QuickActionSelfCare)">Self-Care</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @foreach (var msg in ChatService.Messages)
+            {
+                @if (msg.IsUser)
+                {
+                    <!-- User message -->
+                    <div class="flex justify-end">
+                        <div class="bg-primary/10 p-3 rounded-2xl rounded-tr-none max-w-[85%] text-sm text-stone-700 leading-relaxed">
+                            @msg.Text
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- Bot message -->
+                    <div class="flex gap-3">
+                        <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                            <span class="material-symbols-outlined text-primary text-sm">spa</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-stone-100 shadow-sm max-w-[85%] text-sm text-stone-600 leading-relaxed">
+                            <ChatMessageContent Text="@msg.Text" />
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (ChatService.IsThinking)
+            {
+                <!-- Typing indicator -->
+                <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                        <span class="material-symbols-outlined text-primary text-sm">spa</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-stone-100 shadow-sm text-sm text-stone-400">
+                        <span class="inline-flex gap-1">
+                            <span class="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style="animation-delay: 0ms;"></span>
+                            <span class="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style="animation-delay: 150ms;"></span>
+                            <span class="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style="animation-delay: 300ms;"></span>
+                        </span>
+                    </div>
+                </div>
+            }
+
+            <div @ref="_scrollAnchor"></div>
+        </div>
+
+        <!-- Input -->
+        <div class="p-4 bg-white border-t border-stone-100">
+            <div class="relative">
+                <input class="w-full bg-stone-50 border border-stone-200 rounded-full pl-5 pr-12 py-3 text-sm text-stone-700 placeholder-stone-400 focus:border-primary focus:ring-1 focus:ring-primary transition-all outline-none font-body"
+                       placeholder="Type your message..."
+                       @bind="_currentMessage"
+                       @bind:event="oninput"
+                       @onkeydown="HandleKeyDown"
+                       disabled="@ChatService.IsThinking"/>
+                <button class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary-dark transition-colors shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        @onclick="SendMessage"
+                        disabled="@(ChatService.IsThinking || string.IsNullOrWhiteSpace(_currentMessage))">
+                    <span class="material-symbols-outlined text-sm">send</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string QuickActionRomantic = "I am looking for a romantic gift for my partner";
+    private const string QuickActionSympathy = "I need a thoughtful sympathy gift";
+    private const string QuickActionJustBecause = "I want to surprise someone just because";
+    private const string QuickActionSelfCare = "Show me self-care gifts";
+
+    private bool _isOpen;
+    private string _currentMessage = "";
+    private ElementReference _messagesContainer;
+    private ElementReference _scrollAnchor;
+
+    private async Task OpenChat()
+    {
+        _isOpen = true;
+
+        await ChatService.InitializeAsync();
+        await ChatService.EnsureWorkflowStartedAsync();
+        await ChatService.LoadHistoryAsync();
+    }
+
+    private void CloseChat()
+    {
+        _isOpen = false;
+    }
+
+    private async Task EndChat()
+    {
+        await ChatService.EndSessionAsync();
+        _currentMessage = "";
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_currentMessage) && !ChatService.IsThinking)
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_currentMessage) || ChatService.IsThinking) return;
+
+        var message = _currentMessage.Trim();
+        _currentMessage = "";
+
+        // Show user message + thinking indicator immediately
+        ChatService.Messages.Add(new ChatHistoryEntry(true, message, DateTime.UtcNow));
+        ChatService.IsThinking = true;
+        StateHasChanged();
+        await ScrollToBottom();
+
+        // Await Temporal round-trip — thinking dots visible during this await
+        await ChatService.SendMessageAsync(message);
+
+        StateHasChanged();
+        await ScrollToBottom();
+    }
+
+    private async Task SendQuickAction(string message)
+    {
+        _currentMessage = "";
+
+        // Show user message + thinking indicator immediately
+        ChatService.Messages.Add(new ChatHistoryEntry(true, message, DateTime.UtcNow));
+        ChatService.IsThinking = true;
+        StateHasChanged();
+        await ScrollToBottom();
+
+        await ChatService.SendMessageAsync(message);
+
+        StateHasChanged();
+        await ScrollToBottom();
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval", "document.querySelector('[data-scroll-anchor]')?.scrollIntoView({behavior:'smooth'})");
+        }
+        catch
+        {
+            // JS interop may not be available during prerender
+        }
+    }
+}

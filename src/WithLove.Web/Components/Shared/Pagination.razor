@@ -1,0 +1,28 @@
+<div class="flex justify-center mt-24">
+    <nav class="flex items-center gap-2">
+        @for (var i = 1; i <= TotalPages; i++)
+        {
+            var pageNum = i;
+            if (pageNum == CurrentPage)
+            {
+                <span class="w-8 h-8 flex items-center justify-center rounded-full bg-primary text-white font-display text-sm">@pageNum</span>
+            }
+            else
+            {
+                <a class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 font-display text-sm transition-colors" href="@(BaseUrl)?page=@(pageNum)">@pageNum</a>
+            }
+        }
+        @if (CurrentPage < TotalPages)
+        {
+            <a class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors" href="@(BaseUrl)?page=@(CurrentPage + 1)">
+                <span class="material-symbols-outlined">arrow_forward</span>
+            </a>
+        }
+    </nav>
+</div>
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; } = 3;
+    [Parameter] public string BaseUrl { get; set; } = "";
+}

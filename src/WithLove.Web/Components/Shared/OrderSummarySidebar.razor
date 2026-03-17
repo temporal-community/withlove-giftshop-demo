@@ -1,0 +1,85 @@
+@* OrderSummarySidebar.razor - Sticky order summary sidebar for cart/checkout *@
+
+<div class="bg-white rounded-2xl border border-stone-200 overflow-hidden sticky top-8">
+    @* Header *@
+    <div class="px-6 py-5 border-b border-stone-100">
+        <h2 class="font-display text-xl text-stone-800">Order Summary</h2>
+    </div>
+
+    @* Totals *@
+    <div class="px-6 py-5 space-y-4">
+        <div class="flex justify-between items-center">
+            <span class="text-stone-500 text-sm">Subtotal</span>
+            <span class="text-stone-800 font-medium">@Subtotal.ToString("C")</span>
+        </div>
+
+        @if (EnhancementsTotal > 0)
+        {
+            <div class="flex justify-between items-center">
+                <span class="text-stone-500 text-sm">Gift Enhancements</span>
+                <span class="text-stone-800 font-medium">@EnhancementsTotal.ToString("C")</span>
+            </div>
+        }
+
+        <div class="flex justify-between items-center">
+            <span class="text-stone-500 text-sm">Shipping</span>
+            <span class="text-stone-400 text-sm italic">Calculated at next step</span>
+        </div>
+
+        <div class="flex justify-between items-center">
+            <span class="text-stone-500 text-sm">Tax</span>
+            <span class="text-stone-400 text-sm italic">Calculated at next step</span>
+        </div>
+
+        @* Divider *@
+        <div class="w-full h-px bg-stone-100 my-2"></div>
+
+        @* Total *@
+        <div class="flex justify-between items-center">
+            <span class="font-bold text-stone-800">Total</span>
+            <span class="font-display text-2xl text-stone-800">@Total.ToString("C")</span>
+        </div>
+    </div>
+
+    @* Checkout button *@
+    <div class="px-6 pb-6">
+        <a href="/checkout"
+           class="block w-full bg-stone-800 text-stone-50 text-center py-4 rounded-full text-sm font-bold uppercase tracking-wider hover:bg-primary transition-all shadow-md shadow-stone-300/50">
+            Proceed to Checkout
+        </a>
+
+        <div class="flex items-center justify-center gap-2 mt-4">
+            <span class="material-symbols-outlined text-sm text-stone-400">lock</span>
+            <span class="text-xs text-stone-400">Secure SSL checkout</span>
+        </div>
+    </div>
+
+    @* Estimated delivery + returns info *@
+    <div class="border-t border-stone-100 px-6 py-5 space-y-4 bg-stone-50">
+        <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-lg text-sage-green flex-shrink-0 mt-0.5">local_shipping</span>
+            <div>
+                <p class="text-xs font-bold text-stone-700 uppercase tracking-wider">Estimated Delivery</p>
+                <p class="text-xs text-stone-500 font-light mt-0.5">3–5 business days after dispatch</p>
+            </div>
+        </div>
+        <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-lg text-sage-green flex-shrink-0 mt-0.5">autorenew</span>
+            <div>
+                <p class="text-xs font-bold text-stone-700 uppercase tracking-wider">Easy Returns</p>
+                <p class="text-xs text-stone-500 font-light mt-0.5">30-day hassle-free returns on all items</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public decimal Subtotal { get; set; }
+
+    [Parameter]
+    public decimal EnhancementsTotal { get; set; }
+
+    [Parameter]
+    public decimal Total { get; set; }
+}

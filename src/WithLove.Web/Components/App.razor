@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <base href="/"/>
+    
+    <ResourcePreloader/>
+    
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Quicksand:wght@300;400;500;600&family=Dancing+Script:wght@400;500&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#DFA8A8",
+                        "primary-dark": "#C58B8B",
+                        "stone-50": "#FDFBF7",
+                        "stone-100": "#F5F0EB",
+                        "stone-200": "#E8E2DB",
+                        "stone-800": "#4A453E",
+                        "stone-900": "#292524",
+                        "earth-brown": "#8C7B75",
+                        "sage-green": "#A3B18A",
+                        "clay": "#D4A373",
+                        "lavender-mist": "#E6E0E7",
+                    },
+                    fontFamily: {
+                        "display": ["Cinzel", "serif"],
+                        "body": ["Quicksand", "sans-serif"],
+                        "handwriting": ["Dancing Script", "cursive"]
+                    },
+                    borderRadius: {
+                        "organic": "38% 62% 63% 37% / 41% 44% 56% 59%",
+                        "pebble": "50% 50% 50% 50% / 60% 60% 40% 40%",
+                        "leaf": "0% 100% 0% 100% / 0% 100% 0% 100%"
+                    },
+                    backgroundImage: {
+                        'texture': "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%239C92AC\" fill-opacity=\"0.03\"%3E%3Cpath d=\"M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
+                    }
+                },
+            },
+        }
+    </script>
+    <style type="text/tailwindcss">
+        body { font-family: 'Quicksand', sans-serif; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Cinzel', serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .organic-shape-1 { border-radius: 43% 57% 72% 28% / 37% 38% 62% 63%; }
+        .organic-shape-2 { border-radius: 71% 29% 39% 61% / 28% 57% 43% 72%; }
+        .organic-shape-3 { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+        .organic-shape-bg { border-radius: 64% 36% 28% 72% / 68% 38% 62% 32%; }
+        .gift-card-preview {
+            background-image: radial-gradient(circle at center, #ffffff 0%, #fdfbf7 100%);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .bg-grain {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
+            opacity: 0.15;
+        }
+        .texture-overlay {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+        }
+        .input-focus:focus {
+            border-color: #DFA8A8;
+            box-shadow: 0 0 0 1px #DFA8A8;
+        }
+        .group:focus-within .account-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+    </style>
+
+    <link rel="stylesheet" href="@Assets["app.css"]"/>
+    <link rel="stylesheet" href="@Assets["WithLove.Web.styles.css"]"/>
+    <ImportMap/>
+    <script src="https://js.stripe.com/clover/stripe.js"></script>
+    <HeadOutlet/>
+</head>
+
+<body class="bg-stone-50 text-stone-800 font-body transition-all duration-500 overflow-x-hidden selection:bg-primary selection:text-white">
+<Routes/>
+<ReconnectModal/>
+<script src="js/checkout-stripe.js"></script>
+<script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

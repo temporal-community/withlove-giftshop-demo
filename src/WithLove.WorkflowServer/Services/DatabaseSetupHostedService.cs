@@ -1,0 +1,79 @@
+using Temporalio.Client;
+using Temporalio.Common.EnvConfig;
+using Temporalio.Exceptions;
+using WithLove.Workflows.Activities;
+using WithLove.Workflows.Workflows;
+
+
+namespace WithLove.WorkflowServer.Services;
+
+public class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logger) : BackgroundService
+{
+    private const string WorkflowId = "withlove-db-setup";
+    private const string TaskQueue = "with-love-tasks";
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var client = await ConnectWithRetryAsync(stoppingToken);
+
+            logger.LogInformation("Starting database setup workflow (ID: {WorkflowId})", WorkflowId);
+
+            var handle = await client.StartWorkflowAsync(
+                (DatabaseSetupWorkflow wf) => wf.RunAsync(),
+                new(id: WorkflowId, taskQueue: TaskQueue)
+                {
+                    IdReusePolicy = Temporalio.Api.Enums.V1.WorkflowIdReusePolicy.RejectDuplicate
+                });
+
+            var result = await handle.GetResultAsync<DatabaseSetupResult>();
+
+            logger.LogInformation(
+                "Database setup complete — Migrations: {MigrationCount} applied, Seeding: {Categories} categories, {Products} products, Embeddings: {Embeddings} generated",
+                result.Migration.AppliedCount,
+                result.Seed.CategoriesSeeded,
+                result.Seed.ProductsSeeded,
+                result.Embedding?.ProductsEmbedded ?? 0);
+        }
+        catch (WorkflowAlreadyStartedException)
+        {
+            logger.LogInformation(
+                "Database setup workflow ({WorkflowId}) already ran — skipping",
+                WorkflowId);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Database setup workflow failed");
+            throw;
+        }
+    }
+
+    private async Task<TemporalClient> ConnectWithRetryAsync(CancellationToken stoppingToken)
+    {
+        var connectOptions = ClientEnvConfig.LoadClientConnectOptions();
+        var delay = TimeSpan.FromSeconds(2);
+        const int maxAttempts = 10;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                var client = await TemporalClient.ConnectAsync(connectOptions);
+                logger.LogInformation("Connected to Temporal at {Host}", connectOptions.TargetHost);
+                return client;
+            }
+            catch (RpcException) when (attempt < maxAttempts)
+            {
+                logger.LogWarning(
+                    "Temporal not ready (attempt {Attempt}/{Max}), retrying in {Delay}s...",
+                    attempt, maxAttempts, delay.TotalSeconds);
+                await Task.Delay(delay, stoppingToken);
+                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
+            }
+        }
+
+        // Final attempt — let any exception propagate
+        return await TemporalClient.ConnectAsync(connectOptions);
+    }
+}

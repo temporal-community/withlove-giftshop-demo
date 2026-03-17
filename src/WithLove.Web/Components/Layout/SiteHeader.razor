@@ -1,0 +1,61 @@
+<header class="fixed top-0 w-full z-50 bg-stone-50/80 backdrop-blur-md border-b border-stone-100 transition-all duration-300">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        <div class="flex items-center justify-between h-24">
+            <div class="flex-shrink-0">
+                <a class="font-display text-3xl tracking-widest text-stone-800 flex items-center gap-2 group" href="/">
+                    <span class="relative">
+                        <span class="material-symbols-outlined text-primary font-light text-2xl group-hover:scale-110 transition-transform duration-500">spa</span>
+                    </span>
+                    <span>with love</span>
+                </a>
+            </div>
+            <nav class="hidden md:flex space-x-12">
+                <a class="text-sm uppercase tracking-widest text-stone-500 hover:text-primary transition-colors relative group" href="/collections">
+                    Collections
+                    <span class="absolute -bottom-1 left-0 w-0 h-px bg-primary transition-all duration-300 group-hover:w-full"></span>
+                </a>
+                <a class="text-sm uppercase tracking-widest text-stone-500 hover:text-primary transition-colors relative group" href="#">
+                    Journal
+                    <span class="absolute -bottom-1 left-0 w-0 h-px bg-primary transition-all duration-300 group-hover:w-full"></span>
+                </a>
+                <a class="text-sm uppercase tracking-widest text-stone-500 hover:text-primary transition-colors relative group" href="#">
+                    About
+                    <span class="absolute -bottom-1 left-0 w-0 h-px bg-primary transition-all duration-300 group-hover:w-full"></span>
+                </a>
+            </nav>
+            <div class="flex items-center space-x-8">
+                <SearchButton />
+                <AuthorizeView>
+                    <Authorized>
+                        <div class="relative group">
+                            <button class="text-primary hover:text-primary-dark transition-colors relative flex items-center focus:outline-none">
+                                <span class="material-symbols-outlined font-light text-xl">account_circle</span>
+                            </button>
+                            <div class="account-dropdown absolute right-0 top-full mt-2 w-48 bg-white border border-stone-100 rounded-lg shadow-md opacity-0 invisible transform -translate-y-2 transition-all duration-200 z-50 overflow-hidden">
+                                <div class="flex flex-col py-1">
+                                    <a href="/account/profile" class="flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 hover:text-primary transition-colors">
+                                        <span class="material-symbols-outlined font-light text-lg">person</span>
+                                        Profile
+                                    </a>
+                                    <form method="post" action="/logout">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 hover:text-primary transition-colors">
+                                            <span class="material-symbols-outlined font-light text-lg">logout</span>
+                                            Log Out
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </Authorized>
+                    <NotAuthorized>
+                        <a href="/login" class="text-stone-600 hover:text-primary transition-colors relative flex items-center focus:outline-none">
+                            <span class="material-symbols-outlined font-light text-xl">account_circle</span>
+                        </a>
+                    </NotAuthorized>
+                </AuthorizeView>
+                <CartBadge />
+            </div>
+        </div>
+    </div>
+</header>

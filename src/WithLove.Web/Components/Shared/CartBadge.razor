@@ -1,0 +1,33 @@
+@rendermode InteractiveServer
+@inject ICartService CartService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AnonymousCartSession AnonSession
+@implements IDisposable
+
+<a href="/cart" class="text-stone-600 hover:text-primary transition-colors relative">
+    <span class="material-symbols-outlined font-light text-xl">shopping_bag</span>
+    @if (CartService.ItemCount > 0)
+    {
+        <span class="absolute -top-1 -right-1 bg-primary text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+            @CartService.ItemCount
+        </span>
+    }
+</a>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        CartService.OnChange += OnCartChanged;
+        await CartService.InitializeFromAuthAsync(AuthStateProvider, AnonSession);
+    }
+
+    private void OnCartChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        CartService.OnChange -= OnCartChanged;
+    }
+}

@@ -1,0 +1,27 @@
+@rendermode InteractiveServer
+
+<div class="flex items-center border border-stone-300 rounded-full px-4 gap-4 bg-white">
+    <button type="button" class="text-stone-400 hover:text-stone-800 transition-colors" @onclick="Decrement">−</button>
+    <span class="text-stone-800 font-medium w-4 text-center">@Value</span>
+    <button type="button" class="text-stone-400 hover:text-stone-800 transition-colors" @onclick="Increment">+</button>
+</div>
+
+@code {
+    [Parameter] public int Value { get; set; } = 1;
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    private async Task Increment()
+    {
+        Value++;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task Decrement()
+    {
+        if (Value > 1)
+        {
+            Value--;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+}

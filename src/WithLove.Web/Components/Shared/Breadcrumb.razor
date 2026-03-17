@@ -1,0 +1,20 @@
+<div class="flex items-center gap-2 text-sm @(Light ? "text-white/70" : "text-stone-500") font-light">
+    @for (var i = 0; i < Items.Count; i++)
+    {
+        var item = Items[i];
+        if (i < Items.Count - 1)
+        {
+            <a class="@(Light ? "hover:text-white" : "hover:text-primary") transition-colors" href="@item.Url">@item.Label</a>
+            <span class="@(Light ? "text-white/40" : "text-stone-300")">/</span>
+        }
+        else
+        {
+            <span class="@(Light ? "text-white" : "text-stone-800")">@item.Label</span>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<BreadcrumbItem> Items { get; set; } = [];
+    [Parameter] public bool Light { get; set; }
+}

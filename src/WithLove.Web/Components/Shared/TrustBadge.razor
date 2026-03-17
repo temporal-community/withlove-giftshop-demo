@@ -1,0 +1,15 @@
+<div class="flex items-center gap-4 group">
+    <div class="w-12 h-12 rounded-full bg-stone-50 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-500">
+        <span class="material-symbols-outlined font-light">@Icon</span>
+    </div>
+    <div>
+        <h4 class="font-display text-stone-800 text-sm font-bold">@Title</h4>
+        <p class="text-xs text-stone-400 mt-1">@Subtitle</p>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Subtitle { get; set; } = "";
+}

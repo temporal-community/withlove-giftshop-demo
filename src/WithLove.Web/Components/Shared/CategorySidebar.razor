@@ -1,0 +1,83 @@
+@* CategorySidebar.razor - Sticky sidebar for collection filtering *@
+
+<aside class="sticky top-8 space-y-10">
+    @* Type Filters *@
+    <div>
+        <h3 class="text-xs font-bold uppercase tracking-[0.15em] text-stone-400 mb-4">Type</h3>
+        <ul class="space-y-1">
+            <li>
+                <a href="/collections/@Category.Id"
+                   class="block px-3 py-2 text-sm font-medium text-stone-800 border-l-2 border-primary bg-primary/5 rounded-r-lg transition-colors">
+                    All @Category.Name
+                </a>
+            </li>
+            @if (Category.SubTypes is not null)
+            {
+                @foreach (var subType in Category.SubTypes)
+                {
+                    <li>
+                        <a href="/collections/@Category.Id?type=@Uri.EscapeDataString(subType)"
+                           class="block px-3 py-2 text-sm text-stone-500 hover:text-primary hover:border-l-2 hover:border-primary/40 transition-all rounded-r-lg">
+                            @subType
+                        </a>
+                    </li>
+                }
+            }
+        </ul>
+    </div>
+
+    @* Divider *@
+    <div class="w-full h-px bg-stone-200"></div>
+
+    @* Occasion Filters *@
+    <div>
+        <h3 class="text-xs font-bold uppercase tracking-[0.15em] text-stone-400 mb-4">Occasion</h3>
+        <ul class="space-y-1">
+            @if (Category.Occasions is not null)
+            {
+                @foreach (var occasion in Category.Occasions)
+                {
+                    <li>
+                        <a href="/collections/@Category.Id?occasion=@Uri.EscapeDataString(occasion)"
+                           class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group">
+                            <span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>
+                            @occasion
+                        </a>
+                    </li>
+                }
+            }
+            else
+            {
+                <li><a href="#" class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group"><span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>Birthday</a></li>
+                <li><a href="#" class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group"><span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>Anniversary</a></li>
+                <li><a href="#" class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group"><span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>Just Because</a></li>
+                <li><a href="#" class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group"><span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>Sympathy</a></li>
+                <li><a href="#" class="flex items-center gap-2 px-3 py-2 text-sm text-stone-500 hover:text-primary transition-colors rounded-lg hover:bg-stone-50 group"><span class="w-1.5 h-1.5 rounded-full bg-stone-300 group-hover:bg-primary transition-colors flex-shrink-0"></span>Celebration</a></li>
+            }
+        </ul>
+    </div>
+
+    @* Divider *@
+    <div class="w-full h-px bg-stone-200"></div>
+
+    @* Palette *@
+    <div>
+        <h3 class="text-xs font-bold uppercase tracking-[0.15em] text-stone-400 mb-4">Palette</h3>
+        <div class="flex flex-wrap gap-2">
+            <button title="Blush" class="w-8 h-8 rounded-full bg-[#f4c2c2] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Blush"></button>
+            <button title="Ivory" class="w-8 h-8 rounded-full bg-[#fffff0] border-2 border-stone-200 hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Ivory"></button>
+            <button title="Sage" class="w-8 h-8 rounded-full bg-[#b2c3a8] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Sage"></button>
+            <button title="Dusty Rose" class="w-8 h-8 rounded-full bg-[#c9a0a0] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Dusty Rose"></button>
+            <button title="Terracotta" class="w-8 h-8 rounded-full bg-[#c17d5c] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Terracotta"></button>
+            <button title="Deep Burgundy" class="w-8 h-8 rounded-full bg-[#800020] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Deep Burgundy"></button>
+            <button title="Cream" class="w-8 h-8 rounded-full bg-[#fffdd0] border-2 border-stone-200 hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Cream"></button>
+            <button title="Earth" class="w-8 h-8 rounded-full bg-[#8B7355] border-2 border-transparent hover:border-stone-400 transition-all shadow-sm" aria-label="Filter by Earth"></button>
+        </div>
+    </div>
+
+</aside>
+
+@code {
+    [Parameter, EditorRequired]
+    public Category Category { get; set; } = default!;
+}

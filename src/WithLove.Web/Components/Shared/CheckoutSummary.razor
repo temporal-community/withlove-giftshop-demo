@@ -1,0 +1,64 @@
+@* CheckoutSummary.razor - Gift summary sidebar panel shown during checkout *@
+
+<div class="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+    <div class="px-6 py-5 border-b border-stone-100">
+        <h3 class="font-display text-lg text-stone-800">Gift Summary</h3>
+    </div>
+
+    @* Items list *@
+    <div class="px-6 py-4 space-y-4 max-h-64 overflow-y-auto">
+        @foreach (var item in Items)
+        {
+            <div class="flex items-center gap-3">
+                @if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    <div class="w-12 h-12 rounded-lg overflow-hidden bg-stone-100 flex-shrink-0">
+                        <img src="@item.ImageUrl" alt="@item.ProductName" class="w-full h-full object-cover" />
+                    </div>
+                }
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-stone-800 truncate">@item.ProductName</p>
+                    <p class="text-xs text-stone-500">Qty: @item.Quantity</p>
+                </div>
+                <span class="text-sm font-medium text-stone-800 flex-shrink-0">@((item.Price * item.Quantity).ToString("C"))</span>
+            </div>
+        }
+    </div>
+
+    @* Totals *@
+    <div class="px-6 py-5 border-t border-stone-100 space-y-3">
+        <div class="flex justify-between text-sm">
+            <span class="text-stone-500">Subtotal</span>
+            <span class="text-stone-800 font-medium">@Subtotal.ToString("C")</span>
+        </div>
+        @if (EnhancementsTotal > 0)
+        {
+            <div class="flex justify-between text-sm">
+                <span class="text-stone-500">Gift Enhancements</span>
+                <span class="text-stone-800 font-medium">@EnhancementsTotal.ToString("C")</span>
+            </div>
+        }
+        <div class="flex justify-between text-sm">
+            <span class="text-stone-500">Shipping</span>
+            <span class="text-stone-400 italic text-xs">TBD</span>
+        </div>
+        <div class="w-full h-px bg-stone-100"></div>
+        <div class="flex justify-between">
+            <span class="font-bold text-stone-800">Estimated Total</span>
+            <span class="font-display text-xl text-stone-800">
+                @((Subtotal + EnhancementsTotal).ToString("C"))
+            </span>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CartItem> Items { get; set; } = default!;
+
+    [Parameter]
+    public decimal Subtotal { get; set; }
+
+    [Parameter]
+    public decimal EnhancementsTotal { get; set; }
+}

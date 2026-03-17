@@ -1,0 +1,49 @@
+@* GiftEnhancementCard.razor - Toggleable gift enhancement option *@
+
+<div class="relative rounded-2xl border-2 cursor-pointer transition-all duration-200 overflow-hidden
+    @(Enhancement.IsSelected ? "border-primary bg-primary/5 shadow-md shadow-primary/10" : "border-stone-200 bg-white hover:border-stone-300")"
+     @onclick="@(() => OnToggle.InvokeAsync(Enhancement))">
+
+    @* Selected checkmark *@
+    @if (Enhancement.IsSelected)
+    {
+        <div class="absolute top-3 right-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-sm">
+            <span class="material-symbols-outlined text-white text-sm" style="font-size: 14px;">check</span>
+        </div>
+    }
+
+    <div class="flex items-start gap-4 p-4">
+        @* Enhancement image or icon *@
+        <div class="w-16 h-16 rounded-xl overflow-hidden bg-stone-100 flex-shrink-0">
+            @if (!string.IsNullOrEmpty(Enhancement.ImageUrl))
+            {
+                <img src="@Enhancement.ImageUrl"
+                     alt="@Enhancement.Name"
+                     class="w-full h-full object-cover" />
+            }
+            else
+            {
+                <div class="w-full h-full flex items-center justify-center">
+                    <span class="material-symbols-outlined text-2xl text-stone-400">redeem</span>
+                </div>
+            }
+        </div>
+
+        @* Enhancement info *@
+        <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between gap-2">
+                <h4 class="font-medium text-stone-800 text-sm leading-tight">@Enhancement.Name</h4>
+                <span class="text-sm font-bold text-primary flex-shrink-0">+@Enhancement.Price.ToString("C")</span>
+            </div>
+            <p class="text-stone-500 text-xs font-light mt-1 leading-relaxed">@Enhancement.Description</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public GiftEnhancement Enhancement { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<GiftEnhancement> OnToggle { get; set; }
+}
