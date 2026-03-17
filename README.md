@@ -1,5 +1,7 @@
 # WithLove Gift Shop
 
+<img src="docs/image.png" alt="WithLove Gift Shop" width="50%" />
+
 WithLove is a sample e-commerce applicaiton that show how AI can be integrated into a web application. It includes a curated gift shop with hybrid search (full-text + vector), and an AI-powered chat shopping assistant. 
 The sample also uses OpenAI models for inference and embedding generation.
 
