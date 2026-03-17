@@ -1,6 +1,6 @@
 # WithLove Gift Shop
 
-<img src="docs/image.png" alt="WithLove Gift Shop" width="50%" />
+<img src="docs/image.png" alt="WithLove Gift Shop" width="70%" />
 
 WithLove is a sample e-commerce applicaiton that show how AI can be integrated into a web application. It includes a curated gift shop with hybrid search (full-text + vector), and an AI-powered chat shopping assistant. 
 The sample also uses OpenAI models for inference and embedding generation.
@@ -76,7 +76,20 @@ To stop, press `Ctrl+C` in the terminal.
 - **Chat Assistant (LA)** — Temporal-backed conversational shopping assistant using `Microsoft.Extensions.AI` with tool calling for product search, cart management, and recommendations
 - **Stripe Web elements** — Server-side Checkout Sessions with the Payment and Address elements integrated
 - **FusionCache + Redis** — Multi-layer caching with tag-based invalidation and Redis backplane for cross-instance sync
-- **Temporal Workflows** — Durable database setup, Stripe order processing, and long-lived chat sessions with continue-as-new support
+- **Temporal Workflows** — Durable database setup, Stripe order processing, customer onboarding, and long-lived chat sessions
+
+## Temporal Workflows
+
+The application uses Temporal for durable, long-lived operations:
+
+| Workflow | Purpose | Key Features |
+|----------|---------|--------------|
+| **ChatAgentWorkflow** | Long-lived chat session per user | 24h idle timeout; resumable via `IdConflictPolicy.UseExisting`; Update/Query/Signal pattern for async message handling |
+| **DatabaseSetupWorkflow** | Schema initialization on app startup | Runs full-text search index creation, vector column setup, and initial data seeding; executes once per deployment |
+| **StripeCheckoutOrderWorkflow** | Order processing pipeline | Coordinates Stripe Checkout Session creation, webhook verification, and order fulfillment with retry logic |
+| **CustomerOnboardingWorkflow** | New customer registration flow | Creates Stripe customer record and links to user account; ensures customer data is synced with payment processor |
+
+**Access Temporal UI**: The Aspire dashboard provides a **Temporal UI** link showing all workflows, executions, task queues, and event histories.
 
 ## License
 
