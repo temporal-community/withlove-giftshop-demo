@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Microsoft.EntityFrameworkCore;
 using Temporalio.Common.EnvConfig;
 using WithLove.Data;
@@ -19,7 +21,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 builder.ConfigureOpenTelemetry()
-    .WithTracing(tracing => { tracing.AddSource(Instrumentation.ActivitySourceName); });
+    .WithTracing(tracing =>
+    {
+        tracing.AddSource(Instrumentation.ActivitySourceName);
+        tracing.AddFusionCacheInstrumentation();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(Instrumentation.ActivitySourceName);
+        metrics.AddFusionCacheInstrumentation();
+    });
 
 // Health Checks
 builder.AddDefaultHealthChecks();

@@ -9,7 +9,7 @@ namespace WithLove.Workflows.Activities;
 /// Activities for processing Stripe checkout orders.
 /// Each activity represents a single, durable unit of work that can be retried independently.
 /// </summary>
-public class StripeCheckoutOrderActivities(StripeClient stripeClient)
+public partial class StripeCheckoutOrderActivities(StripeClient stripeClient)
 {
     /// <summary>
     /// Retrieves the completed checkout session from Stripe.
@@ -88,8 +88,7 @@ public class StripeCheckoutOrderActivities(StripeClient stripeClient)
         {
             var confirmationNumber = OrderInfo.GenerateConfirmationNumber(sessionInfo.SessionId);
 
-            logger.LogInformation("Order record created with confirmation number {ConfirmationNumber}",
-                confirmationNumber);
+            LogOrderProcessed(logger, sessionInfo.CustomerEmail, sessionInfo.AmountTotal);
 
             await Task.Delay(500); // Simulate work
 
@@ -104,10 +103,16 @@ public class StripeCheckoutOrderActivities(StripeClient stripeClient)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to create order for session {SessionId}", sessionInfo.SessionId);
+            LogOrderFailed(logger, sessionInfo.SessionId, ex);
             throw;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Order processed for {Email}, amount {Amount}")]
+    private static partial void LogOrderProcessed(ILogger logger, string email, long amount);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Order processing failed for session {SessionId}")]
+    private static partial void LogOrderFailed(ILogger logger, string sessionId, Exception ex);
 
     /// <summary>
     /// Updates the order status and stores fulfillment details.

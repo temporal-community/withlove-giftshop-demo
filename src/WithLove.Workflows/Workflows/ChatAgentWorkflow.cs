@@ -10,7 +10,7 @@ namespace WithLove.Workflows.Workflows;
 /// Uses Update for sync request/response, Query for history reads, Signal for session end.
 /// </summary>
 [Workflow]
-public class ChatAgentWorkflow
+public partial class ChatAgentWorkflow
 {
     private readonly List<ChatHistoryEntry> _history = [];
     private bool _isProcessing;
@@ -23,7 +23,7 @@ public class ChatAgentWorkflow
         if (carriedHistory is { Count: > 0 })
             _history.AddRange(carriedHistory);
 
-        Workflow.Logger.LogInformation("Chat session started: {WorkflowId}", Workflow.Info.WorkflowId);
+        LogSessionStarted(Workflow.Logger, Workflow.Info.WorkflowId);
 
         // Stay alive until shutdown or 24h idle timeout
         var conditionMet = await Workflow.WaitConditionAsync(
@@ -32,11 +32,11 @@ public class ChatAgentWorkflow
 
         if (!conditionMet)
         {
-            Workflow.Logger.LogInformation("Chat session timed out: {WorkflowId}", Workflow.Info.WorkflowId);
+            LogSessionTimedOut(Workflow.Logger, Workflow.Info.WorkflowId);
         }
         else if (Workflow.ContinueAsNewSuggested && !_shutdownRequested)
         {
-            Workflow.Logger.LogInformation("Chat session continue-as-new: {WorkflowId}", Workflow.Info.WorkflowId);
+            LogSessionContinuedAsNew(Workflow.Logger, Workflow.Info.WorkflowId);
             var carried = _history.ToList();
             throw Workflow.CreateContinueAsNewException(
                 (ChatAgentWorkflow wf) => wf.RunAsync(carried));
@@ -98,8 +98,20 @@ public class ChatAgentWorkflow
     [WorkflowSignal]
     public Task EndSessionAsync()
     {
-        Workflow.Logger.LogInformation("Chat session end requested: {WorkflowId}", Workflow.Info.WorkflowId);
+        LogSessionEnded(Workflow.Logger, Workflow.Info.WorkflowId);
         _shutdownRequested = true;
         return Task.CompletedTask;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session started: {WorkflowId}")]
+    private static partial void LogSessionStarted(ILogger logger, string workflowId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session timed out: {WorkflowId}")]
+    private static partial void LogSessionTimedOut(ILogger logger, string workflowId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session continue-as-new: {WorkflowId}")]
+    private static partial void LogSessionContinuedAsNew(ILogger logger, string workflowId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session end requested: {WorkflowId}")]
+    private static partial void LogSessionEnded(ILogger logger, string workflowId);
 }

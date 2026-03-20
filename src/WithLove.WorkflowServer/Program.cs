@@ -16,6 +16,10 @@ builder.ConfigureOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing.AddSource(Instrumentation.ActivitySourceName);
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(Instrumentation.ActivitySourceName);
     });
 
 // Health Checks

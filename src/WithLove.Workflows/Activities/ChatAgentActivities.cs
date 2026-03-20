@@ -1,13 +1,15 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Temporalio.Activities;
 using WithLove.Workflows.Chat;
+using WithLove.Workflows.Telemetry;
 
 namespace WithLove.Workflows.Activities;
 
-public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory httpClientFactory)
+public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory httpClientFactory)
 {
     private const string SystemPrompt = """
         You are LA — the Love Assistant at WithLove Gift Shop. You're warm, a little playful,
@@ -105,18 +107,47 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
 
         var chatOptions = new ChatOptions { Tools = tools };
 
-        logger.LogInformation("Calling AI with {MessageCount} messages, {ToolCount} tools, {CartItems} cart items",
-            messages.Count, tools.Count, _currentCart.Count);
+        // Enrich Temporal's existing activity span rather than creating a new one
+        var activity = Activity.Current;
+        if (activity?.IsAllDataRequested == true)
+        {
+            activity.SetTag("ai.message_count", messages.Count);
+            activity.SetTag("ai.tool_count", tools.Count);
+            activity.SetTag("ai.cart_items", _currentCart.Count);
+        }
 
+        LogInferenceStarted(logger, messages.Count, tools.Count, _currentCart.Count);
+
+        var sw = Stopwatch.StartNew();
         var response = await chatClient.GetResponseAsync(messages, chatOptions);
+        sw.Stop();
 
         var assistantText = response.Text ?? "Hmm, something went sideways on my end. Mind trying that again?";
 
-        logger.LogInformation("AI response received: {Length} chars, {CartActions} cart actions",
-            assistantText.Length, _pendingCartActions.Count);
+        if (activity?.IsAllDataRequested == true)
+        {
+            activity.SetTag("ai.response_length", assistantText.Length);
+            activity.SetTag("ai.cart_actions", _pendingCartActions.Count);
+            activity.SetTag("ai.nav_actions", _pendingNavigationActions.Count);
+        }
+
+        LogInferenceCompleted(logger, assistantText.Length, _pendingCartActions.Count);
+
+        ChatTelemetry.InferenceDuration.Record(sw.Elapsed.TotalMilliseconds);
+
+        foreach (var action in _pendingCartActions)
+            ChatTelemetry.CartMutations.Add(1, new TagList { { "type", action.Type.ToString().ToLower() } });
 
         return new ChatInferenceResult(assistantText, [.. _pendingCartActions], [.. _pendingNavigationActions]);
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Calling AI with {MessageCount} messages, {ToolCount} tools, {CartItems} cart items")]
+    private static partial void LogInferenceStarted(ILogger logger, int messageCount, int toolCount, int cartItems);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "AI response received: {Length} chars, {CartActions} cart actions")]
+    private static partial void LogInferenceCompleted(ILogger logger, int length, int cartActions);
 
     private List<AITool> CreateTools()
     {

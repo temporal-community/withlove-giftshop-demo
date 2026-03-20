@@ -48,7 +48,7 @@ public class ProductCacheServiceTests
 
     private ProductCacheService CreateService()
     {
-        return new ProductCacheService(_fakeDbContext, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator);
+        return new ProductCacheService(_fakeDbContext, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation());
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(null!, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator));
+            new ProductCacheService(null!, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation()));
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(_fakeDbContext, null!, _fakeLogger, _fakeEmbeddingGenerator));
+            new ProductCacheService(_fakeDbContext, null!, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation()));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(_fakeDbContext, _fakeCache, null!, _fakeEmbeddingGenerator));
+            new ProductCacheService(_fakeDbContext, _fakeCache, null!, _fakeEmbeddingGenerator, new Instrumentation()));
     }
 
     [Fact]

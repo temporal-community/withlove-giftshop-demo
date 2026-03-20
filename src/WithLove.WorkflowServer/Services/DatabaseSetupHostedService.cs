@@ -7,7 +7,7 @@ using WithLove.Workflows.Workflows;
 
 namespace WithLove.WorkflowServer.Services;
 
-public class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logger) : BackgroundService
+public partial class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logger) : BackgroundService
 {
     private const string WorkflowId = "withlove-db-setup";
     private const string TaskQueue = "with-love-tasks";
@@ -29,8 +29,7 @@ public class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logg
 
             var result = await handle.GetResultAsync<DatabaseSetupResult>();
 
-            logger.LogInformation(
-                "Database setup complete — Migrations: {MigrationCount} applied, Seeding: {Categories} categories, {Products} products, Embeddings: {Embeddings} generated",
+            LogSetupCompleted(logger,
                 result.Migration.AppliedCount,
                 result.Seed.CategoriesSeeded,
                 result.Seed.ProductsSeeded,
@@ -48,6 +47,10 @@ public class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logg
             throw;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Database setup complete — Migrations: {MigrationCount} applied, Seeding: {Categories} categories, {Products} products, Embeddings: {Embeddings} generated")]
+    private static partial void LogSetupCompleted(ILogger logger, int migrationCount, int categories, int products, int embeddings);
 
     private async Task<TemporalClient> ConnectWithRetryAsync(CancellationToken stoppingToken)
     {

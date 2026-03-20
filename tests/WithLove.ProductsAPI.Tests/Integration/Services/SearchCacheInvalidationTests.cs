@@ -45,7 +45,7 @@ public class SearchCacheInvalidationTests
 
     private ProductCacheService CreateService()
     {
-        return new ProductCacheService(_fakeDbContext, _cache, _fakeLogger, _fakeEmbeddingGenerator);
+        return new ProductCacheService(_fakeDbContext, _cache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation());
     }
 
     [Fact]

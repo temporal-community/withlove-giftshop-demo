@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Data.SqlTypes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -13,12 +14,13 @@ namespace WithLove.ProductsAPI.Services;
 /// Automatically invalidates caches when products are modified.
 /// Uses different TTLs for different query types based on access patterns.
 /// </summary>
-public class ProductCacheService : IProductCacheService
+public partial class ProductCacheService : IProductCacheService
 {
     private readonly ProductsDbContext _dbContext;
     private readonly IFusionCache _cache;
     private readonly ILogger<ProductCacheService> _logger;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
+    private readonly Instrumentation _instrumentation;
 
     private const string ProductKeyPrefix = "product:";
     private const string ProductListKey = "product:v2:all";
@@ -29,12 +31,14 @@ public class ProductCacheService : IProductCacheService
         ProductsDbContext dbContext,
         IFusionCache cache,
         ILogger<ProductCacheService> logger,
-        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
+        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
+        Instrumentation instrumentation)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _embeddingGenerator = embeddingGenerator ?? throw new ArgumentNullException(nameof(embeddingGenerator));
+        _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
     }
 
     public async Task<Product?> GetProductByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -216,8 +220,11 @@ public class ProductCacheService : IProductCacheService
         if (pageNumber < 1) pageNumber = 1;
         if (pageSize < 1) pageSize = 10;
 
+        using var activity = _instrumentation.ActivitySource.StartActivity("product.search");
+
         // --- Full-text search (keyword matching) ---
         List<(int ProductId, int Rank)> ftsResults;
+        var ftsUsedFallback = false;
         try
         {
             var ftsRaw = await _dbContext.Products
@@ -233,7 +240,8 @@ public class ProductCacheService : IProductCacheService
         {
             // FTS may not be available (index not created yet, FTS service not running).
             // Fall back to LIKE-based search.
-            _logger.LogWarning(ex, "Full-text search failed, falling back to LIKE search");
+            LogSearchFtsFallback(_logger, ex);
+            ftsUsedFallback = true;
             var fallbackRaw = await _dbContext.Products
                 .AsNoTracking()
                 .Where(p => p.IsEnabled &&
@@ -268,11 +276,29 @@ public class ProductCacheService : IProductCacheService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Vector search failed, using keyword results only");
+            LogSearchVectorFailed(_logger, ex);
         }
 
         // --- Reciprocal Rank Fusion (RRF) merge ---
         var rankedIds = MergeWithRrf(ftsResults, vectorResults);
+
+        var strategy = ftsUsedFallback ? "fallback_like"
+            : (ftsResults.Count > 0 && vectorResults.Count > 0) ? "hybrid"
+            : ftsResults.Count > 0 ? "fts"
+            : vectorResults.Count > 0 ? "vector"
+            : "empty";
+
+        if (activity?.IsAllDataRequested == true)
+        {
+            activity.SetTag("search.strategy", strategy);
+            activity.SetTag("search.fts_count", ftsResults.Count);
+            activity.SetTag("search.vector_count", vectorResults.Count);
+            activity.SetTag("search.total_results", rankedIds.Count);
+        }
+
+        var tags = new TagList { { "strategy", strategy } };
+        _instrumentation.SearchRequests.Add(1, tags);
+        _instrumentation.SearchResultCount.Record(rankedIds.Count);
 
         var total = rankedIds.Count;
 
@@ -340,4 +366,10 @@ public class ProductCacheService : IProductCacheService
             _ => query.OrderByDescending(p => p.AddedDate) // default: newest first
         };
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Full-text search failed, falling back to LIKE search")]
+    private static partial void LogSearchFtsFallback(ILogger logger, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Vector search failed, using keyword results only")]
+    private static partial void LogSearchVectorFailed(ILogger logger, Exception ex);
 }

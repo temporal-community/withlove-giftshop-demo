@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using WithLove.Data;
 using WithLove.ProductsAPI.Endpoints;
@@ -17,6 +19,12 @@ builder.ConfigureOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing.AddSource(Instrumentation.ActivitySourceName);
+        tracing.AddFusionCacheInstrumentation();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(Instrumentation.ActivitySourceName);
+        metrics.AddFusionCacheInstrumentation();
     });
 
 // Health Checks
