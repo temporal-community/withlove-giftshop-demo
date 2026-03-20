@@ -61,7 +61,8 @@ builder.Services.AddIdentityCore<ShopUser>(options =>
     })
     .AddEntityFrameworkStores<ProductsDbContext>()
     .AddSignInManager()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddClaimsPrincipalFactory<ShopUserClaimsPrincipalFactory>();
 
 builder.Services.AddAuthentication(options =>
     {

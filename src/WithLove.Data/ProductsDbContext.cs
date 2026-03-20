@@ -24,6 +24,8 @@ public class ProductsDbContext(DbContextOptions<ProductsDbContext> options) : Id
 
         modelBuilder.Entity<ShopUser>(e =>
         {
+            e.Property(p => p.FullName)
+                .HasMaxLength(100);
             e.Property(p => p.StripeCustomerId)
                 .HasMaxLength(100);
         });

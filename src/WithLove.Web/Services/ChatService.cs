@@ -8,6 +8,9 @@ using WithLove.Workflows.Workflows;
 
 namespace WithLove.Web.Services;
 
+/// <summary>Result from SendMessageAsync containing the response and any navigation requests.</summary>
+public record ChatMessageResult(string AssistantMessage, List<NavigationAction> NavigationActions);
+
 /// <summary>
 /// Scoped service (one per SignalR circuit) that bridges Blazor UI with the Temporal chat workflow.
 /// </summary>
@@ -18,6 +21,7 @@ public class ChatService(
 {
     private string? _workflowId;
     private bool _initialized;
+    private UserContext? _userContext;
 
     /// <summary>Chat messages for UI rendering.</summary>
     public List<ChatHistoryEntry> Messages { get; } = [];
@@ -39,6 +43,12 @@ public class ChatService(
         _workflowId = userId is not null
             ? $"chat-{userId}"
             : $"chat-anon-{Guid.NewGuid():N}";
+
+        var name  = auth.User.FindFirst(ClaimTypes.Name)?.Value
+                 ?? auth.User.FindFirst(ClaimTypes.GivenName)?.Value;
+        var email = auth.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (name is not null || email is not null)
+            _userContext = new UserContext(name, email);
 
         _initialized = true;
     }
@@ -81,15 +91,12 @@ public class ChatService(
     }
 
     /// <summary>
-    /// Sends a message to the chat workflow and returns the assistant response.
-    /// Applies any cart actions locally.
-    /// </summary>
-    /// <summary>
-    /// Sends a message to the chat workflow and returns the assistant response.
+    /// Sends a message to the chat workflow and returns the assistant response and any navigation actions.
     /// Caller is responsible for adding the user message to Messages and setting
     /// IsThinking before calling this method so the UI can update immediately.
+    /// Applies any cart actions locally.
     /// </summary>
-    public async Task<string> SendMessageAsync(string message)
+    public async Task<ChatMessageResult> SendMessageAsync(string message)
     {
         if (_workflowId is null)
             throw new InvalidOperationException("Call InitializeAsync first.");
@@ -105,7 +112,7 @@ public class ChatService(
 
             var handle = temporalClient.GetWorkflowHandle<ChatAgentWorkflow>(_workflowId);
             var response = await handle.ExecuteUpdateAsync(
-                wf => wf.SendMessageAsync(new ChatRequest(message, cartSnapshot)));
+                wf => wf.SendMessageAsync(new ChatRequest(message, cartSnapshot, _userContext)));
 
             // Add assistant response to local list
             Messages.Add(new ChatHistoryEntry(false, response.AssistantMessage, DateTime.UtcNow));
@@ -113,7 +120,7 @@ public class ChatService(
             // Apply cart actions locally
             await ApplyCartActionsAsync(response.CartActions);
 
-            return response.AssistantMessage;
+            return new ChatMessageResult(response.AssistantMessage, response.NavigationActions);
         }
         finally
         {

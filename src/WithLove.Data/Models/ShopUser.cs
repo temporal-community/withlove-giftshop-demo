@@ -4,5 +4,6 @@ namespace WithLove.Data.Models;
 
 public class ShopUser: IdentityUser
 {
-        public string StripeCustomerId { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string StripeCustomerId { get; set; } = string.Empty;
 }

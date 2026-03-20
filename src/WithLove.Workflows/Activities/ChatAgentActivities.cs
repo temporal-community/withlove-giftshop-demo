@@ -38,23 +38,61 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
         - Before adding to cart, confirm the product ID via search_products or get_product_details.
         - For removing items, use the product IDs from view_cart results.
         - When asked to empty/clear the cart, use clear_cart — do NOT remove items one by one.
+        - AFTER EVERY cart mutation (add_to_cart, remove_from_cart, clear_cart), you MUST immediately
+          call view_cart to verify the result. Compare what you intended with what view_cart shows.
+        - If view_cart reveals an unexpected state (wrong item, wrong quantity, extra items),
+          fix it immediately using remove_from_cart or add_to_cart before responding.
+        - When confirming a cart change, always state the specific product name, quantity, and price.
+          Never give vague confirmations like "added to your cart."
+        - If the customer asks for a specific quantity, verify after adding that view_cart shows
+          the correct total quantity (existing + newly added).
+
+        Navigation tools:
+        - Use navigate_to_product when a customer wants to see a product page.
+        - Use navigate_to_collection when a customer wants to browse a collection.
+          IMPORTANT: navigate_to_collection requires a numeric category ID.
+          If the customer names a collection (e.g. "Comfort", "Romantic"), you MUST call
+          get_categories first, find the matching category ID, then call navigate_to_collection
+          with that ID. Never guess or invent an ID.
+        - Use navigate_to_cart when a customer wants to review their full cart.
+        - Use navigate_to_checkout when a customer is ready to purchase.
+        - Only navigate when the customer's intent clearly suggests it. Do not navigate proactively.
         """;
 
     // Collected cart actions during a single inference turn
     private readonly List<CartAction> _pendingCartActions = [];
 
+    // Navigation actions collected during a single inference turn
+    private readonly List<NavigationAction> _pendingNavigationActions = [];
+
     // Cart snapshot from the current request — set per inference call
     private List<CartSnapshot> _currentCart = [];
+
+    // Mutable working copy of the cart — updated by cart tools so view_cart reflects mutations
+    private WorkingCart _workingCart = new([]);
 
     [Activity]
     public async Task<ChatInferenceResult> InferAsync(ChatInferenceInput input)
     {
         var logger = ActivityExecutionContext.Current.Logger;
         _pendingCartActions.Clear();
+        _pendingNavigationActions.Clear();
         _currentCart = input.Cart ?? [];
+        _workingCart = new WorkingCart(_currentCart);
 
         // Build message history
         var messages = new List<ChatMessage> { new(ChatRole.System, SystemPrompt) };
+
+        if (input.User is { } user)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(user.Name))  parts.Add($"Name: {user.Name}");
+            if (!string.IsNullOrEmpty(user.Email)) parts.Add($"Email: {user.Email}");
+            if (parts.Count > 0)
+                messages.Add(new ChatMessage(ChatRole.System,
+                    $"Customer context — {string.Join(", ", parts)}. " +
+                    "Address them by first name when it feels natural."));
+        }
 
         foreach (var entry in input.History)
         {
@@ -77,7 +115,7 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
         logger.LogInformation("AI response received: {Length} chars, {CartActions} cart actions",
             assistantText.Length, _pendingCartActions.Count);
 
-        return new ChatInferenceResult(assistantText, [.. _pendingCartActions]);
+        return new ChatInferenceResult(assistantText, [.. _pendingCartActions], [.. _pendingNavigationActions]);
     }
 
     private List<AITool> CreateTools()
@@ -100,6 +138,15 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
                 "View the current contents of the customer's cart. Call this before answering questions about the cart."),
             AIFunctionFactory.Create(ClearCart, "clear_cart",
                 "Empty the entire cart. Use this when the customer wants to start fresh or remove everything."),
+            AIFunctionFactory.Create(NavigateToProduct, "navigate_to_product",
+                "Navigate the customer to a product detail page."),
+            AIFunctionFactory.Create(NavigateToCollection, "navigate_to_collection",
+                "Navigate the customer to a product collection (category) page. " +
+                "ALWAYS call get_categories first to find the numeric category ID — never guess it."),
+            AIFunctionFactory.Create(NavigateToCart, "navigate_to_cart",
+                "Navigate the customer to their cart page."),
+            AIFunctionFactory.Create(NavigateToCheckout, "navigate_to_checkout",
+                "Navigate the customer to the checkout page."),
         ];
     }
 
@@ -178,6 +225,9 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
         _pendingCartActions.Add(new CartAction(
             CartActionType.Add, id, name, imageUrl, price, stripePriceId, quantity));
 
+        // Update working cart so view_cart reflects this mutation
+        _workingCart.Add(id, name, price, quantity);
+
         return $"Added {quantity}x {name} (ID: {id}, ${price:F2}) to the cart.";
     }
 
@@ -191,9 +241,10 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
         {
             if (!int.TryParse(raw, out var id)) continue;
 
-            var item = _currentCart.FirstOrDefault(c => c.ProductId == id);
+            var item = _workingCart.FindById(id);
             _pendingCartActions.Add(new CartAction(CartActionType.Remove, ProductId: id));
             removed.Add(item is not null ? $"{item.ProductName} (ID: {id})" : $"ID: {id}");
+            _workingCart.Remove(id);
         }
 
         return removed.Count == 0
@@ -201,25 +252,40 @@ public class ChatAgentActivities(IChatClient chatClient, IHttpClientFactory http
             : Task.FromResult($"Removed from cart: {string.Join(", ", removed)}");
     }
 
-    private Task<string> ViewCart()
-    {
-        if (_currentCart.Count == 0)
-            return Task.FromResult("The cart is empty.");
-
-        var lines = _currentCart
-            .Select(c => $"- ID: {c.ProductId} | {c.ProductName} | ${c.Price:F2} x {c.Quantity}")
-            .ToList();
-
-        var total = _currentCart.Sum(c => c.Price * c.Quantity);
-        lines.Add($"Total: ${total:F2} ({_currentCart.Count} item{(_currentCart.Count != 1 ? "s" : "")})");
-
-        return Task.FromResult(string.Join("\n", lines));
-    }
+    private Task<string> ViewCart() => Task.FromResult(_workingCart.Summarize());
 
     private Task<string> ClearCart()
     {
         _pendingCartActions.Add(new CartAction(CartActionType.Clear));
+        _workingCart.Clear();
         return Task.FromResult("Cart has been emptied.");
+    }
+
+    private Task<string> NavigateToProduct(
+        [Description("The product ID to navigate to")] int productId)
+    {
+        _pendingNavigationActions.Add(new NavigationAction(NavigationTarget.Product, $"/product/{productId}"));
+        return Task.FromResult($"Navigating to product {productId} page.");
+    }
+
+    private Task<string> NavigateToCollection(
+        [Description("Numeric category ID from get_categories results. Use 0 only to show all collections.")] int categoryId = 0)
+    {
+        var url = categoryId > 0 ? $"/collections/{categoryId}" : "/collections";
+        _pendingNavigationActions.Add(new NavigationAction(NavigationTarget.Collection, url));
+        return Task.FromResult(categoryId > 0 ? $"Navigating to collection {categoryId}." : "Navigating to all collections.");
+    }
+
+    private Task<string> NavigateToCart()
+    {
+        _pendingNavigationActions.Add(new NavigationAction(NavigationTarget.Cart, "/cart"));
+        return Task.FromResult("Navigating to your cart.");
+    }
+
+    private Task<string> NavigateToCheckout()
+    {
+        _pendingNavigationActions.Add(new NavigationAction(NavigationTarget.Checkout, "/checkout"));
+        return Task.FromResult("Navigating to checkout.");
     }
 
     /// <summary>

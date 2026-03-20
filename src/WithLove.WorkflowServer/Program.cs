@@ -46,9 +46,9 @@ builder.Services.AddEmbeddingGenerator<string, Embedding<float>>(
     new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", openaiKey)
         .AsIEmbeddingGenerator());
 
-// Register IChatClient for chat assistant (gpt-4o-mini with function invocation)
+// Register IChatClient for chat assistant (gpt-5-nano with function invocation)
 builder.Services.AddChatClient(
-    new OpenAI.Chat.ChatClient("gpt-4o-mini", openaiKey).AsIChatClient())
+    new OpenAI.Chat.ChatClient("gpt-5-nano", openaiKey).AsIChatClient())
     .UseFunctionInvocation();
 
 // Register HttpClient for ProductsAPI access (Aspire service discovery)

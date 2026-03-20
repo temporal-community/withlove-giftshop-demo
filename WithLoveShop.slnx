@@ -11,5 +11,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/WithLove.ProductsAPI.Tests/WithLove.ProductsAPI.Tests.csproj" />
     <Project Path="tests/WithLove.Web.Tests/WithLove.Web.Tests.csproj" />
+    <Project Path="tests/WithLove.Workflows.Tests/WithLove.Workflows.Tests.csproj" />
   </Folder>
 </Solution>

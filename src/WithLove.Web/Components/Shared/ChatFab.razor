@@ -1,6 +1,7 @@
 @rendermode InteractiveServer
 @inject ChatService ChatService
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 @if (!_isOpen)
 {
@@ -111,7 +112,7 @@ else
                 </div>
             }
 
-            <div @ref="_scrollAnchor"></div>
+            <div @ref="_scrollAnchor" data-scroll-anchor></div>
         </div>
 
         <!-- Input -->
@@ -143,6 +144,16 @@ else
     private string _currentMessage = "";
     private ElementReference _messagesContainer;
     private ElementReference _scrollAnchor;
+    private bool _needsScrollToBottom;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsScrollToBottom)
+        {
+            _needsScrollToBottom = false;
+            await ScrollToBottom();
+        }
+    }
 
     private async Task OpenChat()
     {
@@ -151,6 +162,8 @@ else
         await ChatService.InitializeAsync();
         await ChatService.EnsureWorkflowStartedAsync();
         await ChatService.LoadHistoryAsync();
+
+        _needsScrollToBottom = true;
     }
 
     private void CloseChat()
@@ -182,14 +195,20 @@ else
         // Show user message + thinking indicator immediately
         ChatService.Messages.Add(new ChatHistoryEntry(true, message, DateTime.UtcNow));
         ChatService.IsThinking = true;
+        _needsScrollToBottom = true;
         StateHasChanged();
-        await ScrollToBottom();
 
         // Await Temporal round-trip — thinking dots visible during this await
-        await ChatService.SendMessageAsync(message);
+        var result = await ChatService.SendMessageAsync(message);
 
+        _needsScrollToBottom = true;
         StateHasChanged();
-        await ScrollToBottom();
+
+        // Navigate after UI update so user sees the response first
+        if (result.NavigationActions is { Count: > 0 })
+        {
+            Navigation.NavigateTo(result.NavigationActions[^1].Url);
+        }
     }
 
     private async Task SendQuickAction(string message)
@@ -199,13 +218,18 @@ else
         // Show user message + thinking indicator immediately
         ChatService.Messages.Add(new ChatHistoryEntry(true, message, DateTime.UtcNow));
         ChatService.IsThinking = true;
+        _needsScrollToBottom = true;
         StateHasChanged();
-        await ScrollToBottom();
 
-        await ChatService.SendMessageAsync(message);
+        var result = await ChatService.SendMessageAsync(message);
 
+        _needsScrollToBottom = true;
         StateHasChanged();
-        await ScrollToBottom();
+
+        if (result.NavigationActions is { Count: > 0 })
+        {
+            Navigation.NavigateTo(result.NavigationActions[^1].Url);
+        }
     }
 
     private async Task ScrollToBottom()

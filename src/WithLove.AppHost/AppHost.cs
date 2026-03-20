@@ -1,3 +1,4 @@
+using Temporalio.Common;
 using WithLove.AppHost.Resources;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -13,15 +14,19 @@ var stripePublicKey = builder.AddParameter("stripe-public-key");
 
 // Infrastructure
 var redisCache = builder.AddRedis("redisCache")
-    .WithDataVolume()
     //.WithLifetime(ContainerLifetime.Persistent)
     .WithRedisInsight();
 
+if (!isTestMode)
+    redisCache.WithDataVolume();
+
 var sqlserver = builder.AddSqlServer("sqlServer")
     .WithDockerfile("Resources/mssql-fts")
-    .WithDataVolume()
     //.WithLifetime(ContainerLifetime.Persistent)
     .WithDbGate();
+
+if (!isTestMode)
+    sqlserver.WithDataVolume();
 
 var productsDb = sqlserver.AddDatabase("productsDatabase");
 
@@ -48,6 +53,11 @@ if (!isTestMode)
     var temporalServer = builder.AddTemporalDevContainer("temporal-server", opts =>
     {
         opts.Namespace = "default";
+        opts.SearchAttributes =
+        [
+            SearchAttributeKey.CreateKeyword("StripeSessionId"),
+            SearchAttributeKey.CreateKeyword("CustomerId"),
+        ];
     });
 
     // Workflow Server — needs OpenAI for chat inference, Stripe for order processing

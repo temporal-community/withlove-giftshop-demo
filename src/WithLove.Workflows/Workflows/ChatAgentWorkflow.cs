@@ -65,7 +65,7 @@ public class ChatAgentWorkflow
             _history.Add(new ChatHistoryEntry(true, request.UserMessage, Workflow.UtcNow));
 
             // Call AI inference activity (pass cart snapshot for view_cart tool)
-            var input = new ChatInferenceInput([.. _history], request.UserMessage, request.Cart);
+            var input = new ChatInferenceInput([.. _history], request.UserMessage, request.Cart, request.User);
 
             var result = await Workflow.ExecuteActivityAsync(
                 (ChatAgentActivities act) => act.InferAsync(input),
@@ -84,7 +84,7 @@ public class ChatAgentWorkflow
             // Add assistant response to history
             _history.Add(new ChatHistoryEntry(false, result.AssistantMessage, Workflow.UtcNow));
 
-            return new ChatResponse(result.AssistantMessage, result.CartActions);
+            return new ChatResponse(result.AssistantMessage, result.CartActions, result.NavigationActions);
         }
         finally
         {

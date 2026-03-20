@@ -1,6 +1,8 @@
 @page  "/account"
 @page "/account/profile"
 @attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
+@using System.Security.Claims
 
 <PageTitle>Profile Details | With Love</PageTitle>
 
@@ -28,20 +30,26 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
                         <div class="space-y-1">
                             <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Full Name</label>
-                            <p class="text-stone-800 font-medium">Eleanor Whispering-Woods</p>
+                            <p class="text-stone-800 font-medium">@(_fullName ?? "—")</p>
                         </div>
                         <div class="space-y-1">
                             <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Email Address</label>
-                            <p class="text-stone-800 font-medium">eleanor.w@@serenity.com</p>
+                            <p class="text-stone-800 font-medium">@(_email ?? "—")</p>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Phone Number</label>
-                            <p class="text-stone-800 font-medium">+1 (555) 012-3456</p>
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Birthday</label>
-                            <p class="text-stone-800 font-medium">March 14th</p>
-                        </div>
+                        @if (_username is not null)
+                        {
+                            <div class="space-y-1">
+                                <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Username</label>
+                                <p class="text-stone-800 font-medium">@_username</p>
+                            </div>
+                        }
+                        @if (_userId is not null)
+                        {
+                            <div class="space-y-1">
+                                <label class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Account ID</label>
+                                <p class="text-stone-600 font-mono text-sm">@_userId</p>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -106,3 +114,32 @@
         </div>
     </div>
 </div>
+
+@code {
+    private string? _fullName;
+    private string? _email;
+    private string? _username;
+    private string? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+
+        _fullName = user.FindFirst(ClaimTypes.Name)?.Value
+                 ?? user.FindFirst("name")?.Value;
+
+        _email = user.FindFirst(ClaimTypes.Email)?.Value
+              ?? user.FindFirst("email")?.Value;
+
+        _username = user.FindFirst("preferred_username")?.Value
+                 ?? user.FindFirst(ClaimTypes.Upn)?.Value;
+
+        _userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? user.FindFirst("sub")?.Value;
+
+        // Don't show userId if it's the same as the email (some providers use email as sub)
+        if (_userId == _email)
+            _userId = null;
+    }
+}
