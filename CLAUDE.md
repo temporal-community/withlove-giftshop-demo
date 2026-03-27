@@ -6,16 +6,27 @@ WithLove Gift Shop is a .NET 10 distributed application built with .NET Aspire a
 
 API keys are centralized in the Aspire AppHost using **parameters** — a single source of truth that injects values into all consuming projects via environment variables.
 
-**Setting up secrets** (stored in AppHost user secrets, never committed):
-```bash
-cd src/WithLove.AppHost
+**Setting up secrets** (stored in AppHost user secrets, never committed; managed via Aspire CLI):
 
+Run from repo root — Aspire auto-discovers the AppHost (new in Aspire 13.2):
+
+```bash
 # Define all parameters once
-dotnet user-secrets set "Parameters:openai-api-key" "<your-key>"
-dotnet user-secrets set "Parameters:stripe-api-key" "<your-key>"
-dotnet user-secrets set "Parameters:stripe-webhook-secret" "<your-key>"
-dotnet user-secrets set "Parameters:stripe-public-key" "<your-key>"
+aspire secret set Parameters:openai-api-key "<your-key>"
+aspire secret set Parameters:stripe-api-key "<your-key>"
+aspire secret set Parameters:stripe-webhook-secret "<your-key>"
+aspire secret set Parameters:stripe-public-key "<your-key>"
 ```
+
+**Useful Aspire CLI commands:**
+
+| Command | Purpose |
+|---------|---------|
+| `aspire secret set <key> <value>` | Add or update a secret |
+| `aspire secret get <key>` | Read a single secret |
+| `aspire secret list` | List all secrets (table view) |
+| `aspire secret delete <key>` | Remove a secret |
+| `aspire secret path` | Show path to the secrets JSON file |
 
 **Consuming in AppHost.cs**:
 ```csharp

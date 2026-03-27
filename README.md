@@ -17,15 +17,25 @@ The sample also uses OpenAI models for inference and embedding generation.
 
 API keys are defined once in the AppHost using [Aspire parameters](https://learn.microsoft.com/dotnet/aspire/fundamentals/external-parameters) and automatically injected into each project as environment variables. No need to duplicate keys across project appsettings files.
 
-Set up secrets using the .NET user secrets tool (scoped to the AppHost project):
+Set up secrets using the Aspire CLI (Aspire 13.2+). Run from the repo root — Aspire auto-discovers the AppHost:
 
 ```bash
-cd src/WithLove.AppHost
+aspire secret set Parameters:openai-api-key "<your-openai-key>"
+aspire secret set Parameters:stripe-api-key "<your-stripe-secret-key>"
+aspire secret set Parameters:stripe-webhook-secret "<your-stripe-webhook-secret>"
+aspire secret set Parameters:stripe-public-key "<your-stripe-public-key>"
+```
 
-dotnet user-secrets set "Parameters:openai-api-key" "<your-openai-key>"
-dotnet user-secrets set "Parameters:stripe-api-key" "<your-stripe-secret-key>"
-dotnet user-secrets set "Parameters:stripe-webhook-secret" "<your-stripe-webhook-secret>"
-dotnet user-secrets set "Parameters:stripe-public-key" "<your-stripe-public-key>"
+Verify your secrets are stored:
+
+```bash
+aspire secret list
+```
+
+To retrieve a single secret:
+
+```bash
+aspire secret get Parameters:openai-api-key
 ```
 
 The AppHost injects these into the appropriate projects:
