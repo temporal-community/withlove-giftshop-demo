@@ -11,8 +11,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Aspire.Hosting.Testing" Version="13.1.1" />
-		<PackageReference Include="coverlet.collector" Version="8.0.0">
+		<PackageReference Include="Aspire.Hosting.Testing" Version="13.2.0" />
+		<PackageReference Include="coverlet.collector" Version="8.0.1">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
@@ -20,17 +20,17 @@
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="FluentAssertions" Version="8.8.0" />
-		<PackageReference Include="MartinCostello.Logging.XUnit" Version="0.7.0" />
+		<PackageReference Include="FluentAssertions" Version="8.9.0" />
+		<PackageReference Include="MartinCostello.Logging.XUnit" Version="0.7.1" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
 		<PackageReference Include="xunit" Version="2.9.3" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="FakeItEasy" Version="9.0.1" />
-		<PackageReference Include="MockQueryable.FakeItEasy" Version="10.0.2" />
+		<PackageReference Include="MockQueryable.FakeItEasy" Version="10.0.5" />
 	</ItemGroup>
 
 	<ItemGroup>
