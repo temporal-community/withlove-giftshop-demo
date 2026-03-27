@@ -12,10 +12,10 @@ Run from repo root — Aspire auto-discovers the AppHost (new in Aspire 13.2):
 
 ```bash
 # Define all parameters once
-aspire secret set Parameters:openai-api-key "<your-key>"
-aspire secret set Parameters:stripe-api-key "<your-key>"
-aspire secret set Parameters:stripe-webhook-secret "<your-key>"
-aspire secret set Parameters:stripe-public-key "<your-key>"
+aspire secret set "Parameters:openai-api-key" "<your-key>"
+aspire secret set "Parameters:stripe-api-key" "<your-key>"
+aspire secret set "Parameters:stripe-webhook-secret" "<your-key>"
+aspire secret set "Parameters:stripe-public-key" "<your-key>"
 ```
 
 **Useful Aspire CLI commands:**
@@ -336,3 +336,64 @@ group.MapGet("/{id}", GetProductById)
 ```
 
 **Why `IResult` return type?** Pragmatic choice: TypedResults methods provide type safety for success paths, while `IResult` accommodates error responses from `ProblemDetailsResults` helpers without type mismatches. Alternative `Results<Ok<T>, NotFound<T>, BadRequest<T>, ...>` union types were too verbose and conflicted with existing error helper patterns.
+
+## Git Workflow
+
+**CRITICAL: Never commit or push code unless explicitly asked.**
+
+**Key principles:**
+- Use `gh` to create/update issues and PRs, inspect workflow runs, and manage releases
+- Use `git` for all local version control operations
+
+
+- Stage files and show `git status` when done with implementation — do NOT commit automatically
+- Wait for explicit request: "commit these changes" or "commit and push"
+- Even if implementation is complete and tested, wait for user consent
+- This prevents locking in incomplete work and respects user control over git history
+
+**Use CLI tools for Git and GitHub interaction:**
+
+**`git` CLI — Local repository operations:**
+```bash
+# Stage and commit changes
+git add src/file.cs
+git commit -m "Fix bug in authentication"
+
+# Push to remote
+git push origin feature-branch
+
+# Create and switch branches
+git switch -c feature/new-feature
+git switch main
+
+# View history
+git log --oneline -10
+git diff main..feature-branch
+
+# Undo changes
+git revert <commit-hash>
+git reset --soft HEAD~1  # undo last commit, keep changes staged
+```
+
+**`gh` CLI — GitHub-specific operations:**
+```bash
+# Create a pull request
+gh pr create --title "Add new feature" --body "Description of changes"
+
+# View and interact with PRs
+gh pr view 42                    # view PR #42
+gh pr list                       # list all PRs
+gh pr review 42 --approve        # approve a PR
+gh pr checks 42                  # check CI status
+
+# Work with issues
+gh issue create --title "Bug: login fails" --body "Steps to reproduce..."
+gh issue list --state open
+gh issue comment 15 --body "Fixed in PR #42"
+
+# View and manage releases
+gh release create v1.0.0 --title "Version 1.0.0"
+gh release list
+
+```
+

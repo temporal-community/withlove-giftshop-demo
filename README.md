@@ -22,7 +22,6 @@ Set up secrets using the Aspire CLI (Aspire 13.2+). Run from the repo root — A
 ```bash
 aspire secret set Parameters:openai-api-key "<your-openai-key>"
 aspire secret set Parameters:stripe-api-key "<your-stripe-secret-key>"
-aspire secret set Parameters:stripe-webhook-secret "<your-stripe-webhook-secret>"
 aspire secret set Parameters:stripe-public-key "<your-stripe-public-key>"
 ```
 
