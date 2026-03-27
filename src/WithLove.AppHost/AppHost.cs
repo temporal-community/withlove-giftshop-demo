@@ -5,14 +5,14 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var isTestMode = builder.Configuration["TESTING"] == "true";
 
-// Centralized parameters — set once via user secrets or AppHost appsettings,
-// injected into projects as environment variables by Aspire.
+// Secret Keys
 var openaiKey = builder.AddParameter("openai-api-key", secret: true);
 var stripeApiKey = builder.AddParameter("stripe-api-key", secret: true);
-var stripeWebhookSecret = builder.AddParameter("stripe-webhook-secret", secret: true);
-var stripePublicKey = builder.AddParameter("stripe-public-key");
+var stripePublicKey = builder.AddParameter("stripe-public-key", secret: true);
 
 // Infrastructure
+var stripe = builder.AddStripeCliContainer("stripe", apiKey: stripeApiKey, publishableKey: stripePublicKey);
+
 var redisCache = builder.AddRedis("redisCache")
     //.WithLifetime(ContainerLifetime.Persistent)
     .WithRedisInsight();
@@ -63,8 +63,7 @@ if (!isTestMode)
     // Workflow Server — needs OpenAI for chat inference, Stripe for order processing
     builder.AddProject<Projects.WithLove_WorkflowServer>("workflowServer")
         .WithEnvironment("OPENAI_API_KEY", openaiKey)
-        .WithEnvironment("Stripe__Default__ApiKey", stripeApiKey)
-        .WithEnvironment("Stripe__Default__WebhookSecret", stripeWebhookSecret)
+        .WithReference(stripe)
         .WaitFor(temporalServer)
         .WithReference(temporalServer)
         .WaitFor(productsDb)
@@ -72,11 +71,9 @@ if (!isTestMode)
         .WithReference(productsApi);
 
     // Web frontend — needs OpenAI for search, Stripe for checkout
-    builder.AddProject<Projects.WithLove_Web>("shopSite")
+    var shopSite = builder.AddProject<Projects.WithLove_Web>("shopSite")
         .WithEnvironment("OPENAI_API_KEY", openaiKey)
-        .WithEnvironment("Stripe__Default__ApiKey", stripeApiKey)
-        .WithEnvironment("Stripe__Default__WebhookSecret", stripeWebhookSecret)
-        .WithEnvironment("Stripe__Default__PublicKey", stripePublicKey)
+        .WithReference(stripe)
         .WaitFor(redisCache)
         .WithReference(redisCache)
         .WaitFor(productsDb)
@@ -85,6 +82,8 @@ if (!isTestMode)
         .WaitFor(temporalServer)
         .WithReference(temporalServer)
         .WithReference(productsApi);
+
+    stripe.WithWebhookForwardTo(shopSite, "/stripe/webhook");
 }
 
 builder.Build().Run();
