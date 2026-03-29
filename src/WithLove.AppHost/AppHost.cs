@@ -1,7 +1,11 @@
 using Temporalio.Common;
 using WithLove.AppHost.Resources;
 
-var builder = DistributedApplication.CreateBuilder(args);
+var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions()
+{
+    Args = args,
+    DashboardApplicationName = "WithLove Resource Dashboard",    
+});
 
 var isTestMode = builder.Configuration["TESTING"] == "true";
 
