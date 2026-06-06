@@ -59,7 +59,7 @@ This listens for Stripe webhook events and forwards them to your local web app. 
 Build the solution:
 
 ```bash
-dotnet build WithLoveShop.slnx
+dotnet build
 ```
 
 Run the Aspire AppHost
