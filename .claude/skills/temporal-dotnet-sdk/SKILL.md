@@ -1,5 +1,5 @@
 ---
-name: dotnet-sdk
+name: temporal-dotnet-sdk
 description: This skill should be used when the user asks to 'create a Temporal workflow in C#', 'write a .NET activity', 'use Temporalio', 'fix .NET workflow determinism', 'debug workflow replay', '.NET workflow logging', or mentions 'Temporal .NET SDK' or 'Temporal C#'. Provides .NET-specific patterns, CRITICAL Task scheduling guidance, and observability patterns.
 version: 0.1.0
 ---
