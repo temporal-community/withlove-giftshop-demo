@@ -2,7 +2,9 @@
 @page "/account/profile"
 @attribute [Authorize]
 @inject AuthenticationStateProvider AuthStateProvider
+@inject ILoyaltyService LoyaltyService
 @using System.Security.Claims
+@using WithLove.Workflows.Loyalty
 
 <PageTitle>Profile Details | With Love</PageTitle>
 
@@ -104,6 +106,31 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Love Tokens -->
+                <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-10 hover:shadow-xl hover:shadow-stone-100/50 transition-all duration-500">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6 pb-6 border-b border-stone-50">
+                        <div>
+                            <h2 class="text-xl font-display text-stone-800 mb-1">Love Tokens</h2>
+                            <p class="text-xs text-stone-400 font-light tracking-wide uppercase">Your loyalty rewards</p>
+                        </div>
+                        <TierBadge Tier="@_loyaltyProfile?.Tier" />
+                    </div>
+                    @if (_loyaltyProfile is null)
+                    {
+                        <p class="text-stone-400 font-light text-sm">You haven't earned any tokens yet.</p>
+                    }
+                    else
+                    {
+                        <div class="flex flex-col sm:flex-row items-start sm:items-end gap-6">
+                            <div>
+                                <p class="text-5xl font-display text-primary font-bold">@_loyaltyProfile.Balance</p>
+                                <p class="text-xs text-stone-400 font-light mt-1">tokens available</p>
+                            </div>
+                            <a href="/account/loyalty" class="text-xs uppercase tracking-widest text-stone-500 hover:text-primary border-b border-stone-200 hover:border-primary transition-all pb-1">View All</a>
+                        </div>
+                    }
+                </div>
             </div>
 
             <!-- Bottom CTA -->
@@ -120,6 +147,7 @@
     private string? _email;
     private string? _username;
     private string? _userId;
+    private LoyaltyProfile? _loyaltyProfile;
 
     protected override async Task OnInitializedAsync()
     {
@@ -141,5 +169,12 @@
         // Don't show userId if it's the same as the email (some providers use email as sub)
         if (_userId == _email)
             _userId = null;
+
+        var loyaltyUserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                         ?? user.FindFirst("sub")?.Value;
+        if (loyaltyUserId is not null)
+        {
+            _loyaltyProfile = await LoyaltyService.GetLoyaltyProfileAsync(loyaltyUserId);
+        }
     }
 }

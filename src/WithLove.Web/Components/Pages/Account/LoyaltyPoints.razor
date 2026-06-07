@@ -1,0 +1,159 @@
+@page "/account/loyalty"
+@attribute [Authorize]
+@inject ILoyaltyService LoyaltyService
+@inject AuthenticationStateProvider AuthStateProvider
+@using System.Security.Claims
+@using WithLove.Workflows.Loyalty
+
+<PageTitle>Love Tokens | With Love</PageTitle>
+
+<div class="min-h-[calc(100vh-6rem)] flex flex-col lg:flex-row">
+    <AccountSidebar ActivePage="loyalty" />
+
+    <div class="flex-1 lg:ml-72 p-6 lg:p-16">
+        <div class="max-w-5xl mx-auto">
+            <!-- Page Header -->
+            <div class="mb-12">
+                <h1 class="text-3xl md:text-4xl font-display text-stone-800 mb-2">Love Tokens</h1>
+                <p class="text-sm text-stone-400 font-light">Your loyalty rewards — every $1 spent earns 1 token.</p>
+            </div>
+
+            @if (_profile is null && _transactions.Count == 0)
+            {
+                <!-- Empty State -->
+                <div class="bg-white border border-stone-100 rounded-3xl p-10 text-center hover:shadow-xl hover:shadow-stone-100/50 transition-all duration-500">
+                    <span class="material-symbols-outlined text-5xl text-stone-200 mb-4 block">favorite</span>
+                    <h2 class="text-xl font-display text-stone-700 mb-2">No Love Tokens Yet</h2>
+                    <p class="text-sm text-stone-400 font-light mb-6">You haven't earned any Love Tokens yet — every $1 spent earns 1 token.</p>
+                    <a href="/collections" class="inline-block px-8 py-3 rounded-full bg-stone-800 text-white text-xs font-bold uppercase tracking-widest hover:bg-primary transition-colors duration-300">
+                        Start Shopping
+                    </a>
+                </div>
+            }
+            else
+            {
+                <div class="grid grid-cols-1 gap-8">
+                    <!-- Balance & Tier Card -->
+                    <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-10 hover:shadow-xl hover:shadow-stone-100/50 transition-all duration-500">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-6 border-b border-stone-50">
+                            <div>
+                                <h2 class="text-xl font-display text-stone-800 mb-1">Current Balance</h2>
+                                <p class="text-xs text-stone-400 font-light tracking-wide uppercase">Lifetime earned: @(_profile?.LifetimeEarned ?? 0) tokens</p>
+                            </div>
+                            <TierBadge Tier="@_profile?.Tier" />
+                        </div>
+
+                        <div class="flex flex-col md:flex-row items-start md:items-end gap-6">
+                            <div>
+                                <p class="text-6xl font-display text-primary font-bold">@(_profile?.Balance ?? 0)</p>
+                                <p class="text-sm text-stone-400 font-light mt-1">tokens available</p>
+                            </div>
+
+                            @if (_profile?.Tier != LoyaltyTier.Gold)
+                            {
+                                <div class="flex-1 md:max-w-sm">
+                                    <div class="flex justify-between text-xs text-stone-400 mb-2">
+                                        <span>@NextTierName progress</span>
+                                        <span>@(_profile?.PointsToNextTier ?? 0) pts to go</span>
+                                    </div>
+                                    <div class="w-full bg-stone-100 rounded-full h-2">
+                                        <div class="bg-primary rounded-full h-2 transition-all duration-500"
+                                             style="width: @TierProgressPercent%"></div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex-1">
+                                    <p class="text-sm text-yellow-700 font-medium flex items-center gap-1.5">
+                                        <span class="material-symbols-outlined text-base">workspace_premium</span>
+                                        Maximum tier reached — you're Gold!
+                                    </p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Transaction History -->
+                    @if (_transactions.Count > 0)
+                    {
+                        <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-10 hover:shadow-xl hover:shadow-stone-100/50 transition-all duration-500">
+                            <div class="mb-8 pb-6 border-b border-stone-50">
+                                <h2 class="text-xl font-display text-stone-800 mb-1">Transaction History</h2>
+                                <p class="text-xs text-stone-400 font-light tracking-wide uppercase">Your last @_transactions.Count transactions</p>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="text-left border-b border-stone-50">
+                                            <th class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold pb-4">Date</th>
+                                            <th class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold pb-4">Reason</th>
+                                            <th class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold pb-4">Reference</th>
+                                            <th class="text-[10px] uppercase tracking-widest text-stone-400 font-semibold pb-4 text-right">Points</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-stone-50">
+                                        @foreach (var tx in _transactions)
+                                        {
+                                            <tr class="hover:bg-stone-50/50 transition-colors">
+                                                <td class="py-4 text-stone-500 font-light text-xs">@tx.OccurredAt.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                                <td class="py-4 text-stone-700 font-medium">@tx.Reason</td>
+                                                <td class="py-4 text-stone-400 font-light text-xs">@(tx.DisplayRef ?? "—")</td>
+                                                <td class="py-4 text-right font-bold @(tx.Points > 0 ? "text-sage-green" : "text-primary")">
+                                                    @(tx.Points > 0 ? "+" : "−")@Math.Abs(tx.Points)
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- CTA -->
+                    <div class="mt-4 text-center space-y-4">
+                        <p class="text-stone-400 text-sm font-light italic">"Every purchase is a gift of love."</p>
+                        <a href="/collections" class="text-xs uppercase tracking-widest text-stone-500 hover:text-primary border-b border-stone-200 hover:border-primary transition-all pb-1">Shop to earn more tokens</a>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoyaltyProfile? _profile;
+    private IReadOnlyList<PointTransaction> _transactions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (userId is null) return;
+
+        _profile = await LoyaltyService.GetLoyaltyProfileAsync(userId);
+        _transactions = await LoyaltyService.GetTransactionHistoryAsync(userId, limit: 20);
+    }
+
+    private string NextTierName => _profile?.Tier switch
+    {
+        LoyaltyTier.Bronze => "Silver",
+        LoyaltyTier.Silver => "Gold",
+        _                  => ""
+    };
+
+    private int TierProgressPercent
+    {
+        get
+        {
+            if (_profile is null) return 0;
+            return _profile.Tier switch
+            {
+                LoyaltyTier.Bronze => (int)Math.Min(100, (_profile.LifetimeEarned / 500.0) * 100),
+                LoyaltyTier.Silver => (int)Math.Min(100, ((_profile.LifetimeEarned - 500) / 1500.0) * 100),
+                _                  => 100
+            };
+        }
+    }
+}

@@ -11,6 +11,7 @@
 @inject IConfiguration Configuration
 @inject AnonymousCartSession AnonSession
 @inject UserManager<ShopUser> UserManager
+@inject ILoyaltyService LoyaltyService
 @implements IAsyncDisposable
 
 <PageTitle>Checkout | With Love</PageTitle>
@@ -42,21 +43,24 @@
                 <EditForm Model="checkoutModel" OnValidSubmit="HandleValidSubmit" FormName="checkout">
                     <DataAnnotationsValidator />
 
-                    @* Step 1: Delivery Recipient *@
-                    <div class="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 mb-6">
-                        <CheckoutStepHeader StepNumber="1" Title="Delivery Recipient" />
+                    @* Step 1: Delivery Recipient — only shown after payment initiated *@
+                    @if (_paymentInitiated)
+                    {
+                        <div class="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 mb-6">
+                            <CheckoutStepHeader StepNumber="1" Title="Delivery Recipient" />
 
-                        <div class="relative min-h-[80px]">
-                            @if (!stripeReady)
-                            {
-                                <div class="absolute inset-0 z-10 bg-white/80 rounded-xl flex items-center justify-center gap-2 text-stone-400 text-sm">
-                                    <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
-                                    <span class="font-light">Loading address form...</span>
-                                </div>
-                            }
-                            <div id="shipping-address-element" class="min-h-[80px]"></div>
+                            <div class="relative min-h-[80px]">
+                                @if (!_stripeReady)
+                                {
+                                    <div class="absolute inset-0 z-10 bg-white/80 rounded-xl flex items-center justify-center gap-2 text-stone-400 text-sm">
+                                        <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                                        <span class="font-light">Loading address form...</span>
+                                    </div>
+                                }
+                                <div id="shipping-address-element" class="min-h-[80px]"></div>
+                            </div>
                         </div>
-                    </div>
+                    }
 
                     @* Step 2: Your Message *@
                     <div class="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 mb-6">
@@ -82,60 +86,91 @@
 
                     </div>
 
-                    @* Step 3: Secure Payment *@
-                    <div class="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 mb-8">
-                        <CheckoutStepHeader StepNumber="3" Title="Secure Payment" />
-
-                        <div class="mb-6">
-                            <label class="block text-xs font-bold uppercase tracking-[0.12em] text-stone-400 mb-2" for="billingEmail">Billing Email</label>
-                            <InputText id="billingEmail"
-                                       @bind-Value="checkoutModel.BillingEmail"
-                                       type="email"
-                                       placeholder="your@email.com"
-                                       readonly
-                                       class="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-stone-300" />
-                            <ValidationMessage For="@(() => checkoutModel.BillingEmail)" class="text-xs text-red-500 mt-1" />
-                        </div>
-                        
-                        @* Stripe Payment Element *@
-                        <div class="relative mb-5 min-h-[80px]">
-                            @if (!stripeReady)
-                            {
-                                <div class="absolute inset-0 z-10 bg-white/80 rounded-xl flex items-center justify-center gap-2 text-stone-400 text-sm">
+                    @* Proceed to Payment button — shown before payment is initiated *@
+                    @if (!_paymentInitiated)
+                    {
+                        <div class="flex justify-end mb-6">
+                            <button type="button" @onclick="ProceedToPaymentAsync"
+                                    disabled="@(_stripeLoading)"
+                                    class="px-8 py-3 bg-stone-800 text-white rounded-full font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all disabled:opacity-60 flex items-center gap-2">
+                                @if (_stripeLoading)
+                                {
                                     <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
-                                    <span class="font-light">Loading secure payment...</span>
-                                </div>
-                            }
-                            <div id="payment-element" class="bg-stone-50 border border-stone-200 rounded-xl p-3 min-h-[80px]"></div>
+                                    <span>Setting up payment...</span>
+                                }
+                                else
+                                {
+                                    <span>Proceed to Payment</span>
+                                    <span class="material-symbols-outlined text-base">arrow_forward</span>
+                                }
+                            </button>
                         </div>
+                    }
 
-                        @* Security note *@
-                        <div class="flex items-center gap-2 mb-6 text-stone-400">
-                            <span class="material-symbols-outlined text-sm">lock</span>
-                            <p class="text-xs font-light">Your payment information is encrypted and never stored on our servers.</p>
+                    @* Step 3: Secure Payment — only shown after payment initiated *@
+                    @if (_paymentInitiated)
+                    {
+                        <div class="bg-white rounded-2xl border border-stone-200 p-6 md:p-8 mb-8">
+                            <CheckoutStepHeader StepNumber="3" Title="Secure Payment" />
+
+                            <div class="mb-6">
+                                <label class="block text-xs font-bold uppercase tracking-[0.12em] text-stone-400 mb-2" for="billingEmail">Billing Email</label>
+                                <InputText id="billingEmail"
+                                           @bind-Value="checkoutModel.BillingEmail"
+                                           type="email"
+                                           placeholder="your@email.com"
+                                           readonly
+                                           class="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-stone-300" />
+                                <ValidationMessage For="@(() => checkoutModel.BillingEmail)" class="text-xs text-red-500 mt-1" />
+                            </div>
+
+                            @* Stripe Payment Element *@
+                            <div class="relative mb-5 min-h-[80px]">
+                                @if (!_stripeReady)
+                                {
+                                    <div class="absolute inset-0 z-10 bg-white/80 rounded-xl flex items-center justify-center gap-2 text-stone-400 text-sm">
+                                        <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                                        <span class="font-light">Loading secure payment...</span>
+                                    </div>
+                                }
+                                <div id="payment-element" class="bg-stone-50 border border-stone-200 rounded-xl p-3 min-h-[80px]"></div>
+                            </div>
+
+                            @* Security note *@
+                            <div class="flex items-center gap-2 mb-6 text-stone-400">
+                                <span class="material-symbols-outlined text-sm">lock</span>
+                                <p class="text-xs font-light">Your payment information is encrypted and never stored on our servers.</p>
+                            </div>
+
+                            @* Submit button *@
+                            <button type="submit"
+                                    disabled="@isSubmitting"
+                                    class="w-full bg-stone-800 text-white py-4 rounded-full font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all shadow-lg shadow-stone-300/50 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                @if (isSubmitting)
+                                {
+                                    <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                                    <span>Processing...</span>
+                                }
+                                else
+                                {
+                                    <span class="material-symbols-outlined text-base">favorite</span>
+                                    <span>Complete Purchase</span>
+                                }
+                            </button>
+
+                            @if (!string.IsNullOrEmpty(errorMessage))
+                            {
+                                <p class="text-sm text-red-500 text-center mt-4">@errorMessage</p>
+                            }
                         </div>
+                    }
 
-                        @* Submit button *@
-                        <button type="submit"
-                                disabled="@isSubmitting"
-                                class="w-full bg-stone-800 text-white py-4 rounded-full font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all shadow-lg shadow-stone-300/50 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                            @if (isSubmitting)
-                            {
-                                <span class="material-symbols-outlined text-base animate-spin">progress_activity</span>
-                                <span>Processing...</span>
-                            }
-                            else
-                            {
-                                <span class="material-symbols-outlined text-base">favorite</span>
-                                <span>Complete Purchase</span>
-                            }
-                        </button>
+                    @* Error message shown outside payment card (e.g. before payment initiated) *@
+                    @if (!_paymentInitiated && !string.IsNullOrEmpty(errorMessage))
+                    {
+                        <p class="text-sm text-red-500 text-center mt-4">@errorMessage</p>
+                    }
 
-                        @if (!string.IsNullOrEmpty(errorMessage))
-                        {
-                            <p class="text-sm text-red-500 text-center mt-4">@errorMessage</p>
-                        }
-                    </div>
                 </EditForm>
             </div>
 
@@ -146,10 +181,38 @@
                 <PersonalNotePreview Message="@checkoutModel.Message"
                                      RecipientName="@checkoutModel.RecipientFirstName" />
 
+                @* Love Tokens redemption — only shown before payment is initiated *@
+                @if ((_loyaltyProfile?.Balance ?? 0) > 0 && !_paymentInitiated)
+                {
+                    <div class="bg-white rounded-2xl border border-stone-200 p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="material-symbols-outlined text-primary">favorite</span>
+                            <h3 class="font-display text-stone-800">Love Tokens</h3>
+                        </div>
+                        <p class="text-xs text-stone-500 mb-3">You have <strong>@_loyaltyProfile!.Balance pts</strong> available. 100 pts = $1 off.</p>
+                        <div class="flex gap-2">
+                            <input type="number"
+                                   class="flex-1 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-800 focus:outline-none focus:border-primary"
+                                   min="100" step="100" max="@GetMaxRedeemablePoints()"
+                                   placeholder="e.g. 100" @bind="_pointsToRedeem" />
+                            <button type="button" @onclick="ApplyTokens"
+                                    class="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors">
+                                Apply
+                            </button>
+                        </div>
+                        @if (_appliedDiscount > 0)
+                        {
+                            <p class="text-xs text-green-600 mt-2 font-medium">&#10003; @_pointsToRedeem pts will be redeemed for @_appliedDiscount.ToString("C") off</p>
+                        }
+                    </div>
+                }
+
                 @* Gift summary *@
                 <CheckoutSummary Items="CartService.Items"
                                  Subtotal="CartService.Subtotal"
-                                 EnhancementsTotal="CartService.EnhancementsTotal" />
+                                 EnhancementsTotal="CartService.EnhancementsTotal"
+                                 AvailablePoints="@(_loyaltyProfile?.Balance ?? 0)"
+                                 PointsDiscount="@_appliedDiscount" />
 
                 @* Trust badges *@
                 <div class="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
@@ -185,11 +248,24 @@
     private CheckoutModel checkoutModel { get; set; } = default!;
 
     private bool isSubmitting;
-    private bool stripeReady;
     private bool stripeInitialized;
     private string? errorMessage;
     private string? stripeCustomerId;
     private string? stripeSessionId;
+
+    // Payment lifecycle state — replaces the old single stripeReady flag
+    private bool _paymentInitiated;   // user has clicked "Proceed to Payment"
+    private bool _stripeLoading;      // session creation in-flight
+    private bool _stripeReady;        // Stripe Elements mounted and ready
+
+    // Loyalty state
+    private LoyaltyProfile? _loyaltyProfile;
+    private int _pointsToRedeem;
+    private decimal _appliedDiscount;
+    private string? _redemptionId;
+
+    // Current authenticated user id (populated in OnInitializedAsync)
+    private string? _currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -212,21 +288,86 @@
         {
             Navigation.NavigateTo("/cart");
         }
+
+        // Load loyalty profile for the current user
+        _currentUserId = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (_currentUserId is not null)
+        {
+            try
+            {
+                _loyaltyProfile = await LoyaltyService.GetLoyaltyProfileAsync(_currentUserId);
+            }
+            catch
+            {
+                // Loyalty service unavailable — proceed without discount options
+                _loyaltyProfile = null;
+            }
+        }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // OnAfterRenderAsync removed — session creation is now explicit via ProceedToPaymentAsync
+
+    private void ApplyTokens()
     {
-        if (!firstRender || stripeInitialized || !CartService.Items.Any())
+        var maxRedeemable = GetMaxRedeemablePoints();
+
+        if (_pointsToRedeem < 100 || _pointsToRedeem > maxRedeemable || _pointsToRedeem % 100 != 0)
+        {
+            errorMessage = "Enter a valid amount in multiples of 100.";
             return;
-
-        stripeInitialized = true;
-        await CreateAndMountStripeSession();
+        }
+        _appliedDiscount = _pointsToRedeem / 100m;
+        errorMessage = null;
     }
 
-    private async Task CreateAndMountStripeSession()
+    private int GetMaxRedeemablePoints()
     {
+        var maxByOrder = Math.Floor(Math.Max(0m, CartService.Total - 0.50m)) * 100;
+        return (int)Math.Min(_loyaltyProfile?.Balance ?? 0, maxByOrder);
+    }
+
+    private async Task ProceedToPaymentAsync()
+    {
+        _paymentInitiated = true;
+        _stripeLoading = true;
+        errorMessage = null;
+        _redemptionId = null;
+        _appliedDiscount = 0;
+        StateHasChanged();
+
+        // Step A: Reserve loyalty points if user chose to redeem
+        if (_pointsToRedeem > 0)
+        {
+            var maxRedeemable = GetMaxRedeemablePoints();
+            if (_currentUserId is null ||
+                _pointsToRedeem < 100 ||
+                _pointsToRedeem > maxRedeemable ||
+                _pointsToRedeem % 100 != 0)
+            {
+                errorMessage = "Enter a valid Love Tokens amount before proceeding.";
+                _paymentInitiated = false;
+                _stripeLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            try
+            {
+                var reservation = await LoyaltyService.ReservePointsAsync(_currentUserId, _pointsToRedeem);
+                _redemptionId = reservation.RedemptionId;
+                _appliedDiscount = reservation.DiscountAmount;
+            }
+            catch
+            {
+                errorMessage = "Unable to apply Love Tokens. Proceeding without discount.";
+                _pointsToRedeem = 0;
+                _appliedDiscount = 0;
+            }
+        }
+
         try
         {
+            // Build line items
             var lineItems = CartService.Items.Select(item => new Stripe.Checkout.SessionLineItemOptions
             {
                 Price = item.StripePriceId,
@@ -250,38 +391,92 @@
                 });
             }
 
+            // Step B: Create coupon if redemption reserved
+            string? couponId = null;
+            if (_appliedDiscount > 0)
+            {
+                var coupon = await StripeClient.V1.Coupons.CreateAsync(new Stripe.CouponCreateOptions
+                {
+                    AmountOff = (long)(_appliedDiscount * 100),
+                    Currency = "usd",
+                    Duration = "once",
+                    Name = $"Love Tokens ({_pointsToRedeem} pts)"
+                });
+                couponId = coupon.Id;
+            }
+
+            // Step C: Build session options
             var sessionOptions = new Stripe.Checkout.SessionCreateOptions
             {
                 UiMode = "custom",
                 Mode = "payment",
                 LineItems = lineItems,
                 ReturnUrl = $"{Navigation.BaseUri}order-confirmation?session_id={{CHECKOUT_SESSION_ID}}",
-                AllowPromotionCodes = true,
                 Customer = stripeCustomerId,
-                ShippingAddressCollection = new()
-                {
-                    AllowedCountries = ["US", "CA", "GB", "AU"]
-                }
+                ShippingAddressCollection = new() { AllowedCountries = ["US", "CA", "GB", "AU"] },
+                Metadata = new Dictionary<string, string>()
             };
 
-            var session = await StripeClient.V1.Checkout.Sessions.CreateAsync(sessionOptions);
-            stripeSessionId = session.Id;
-            var publicKey = Configuration["Stripe:Default:PublicKey"];
+            if (_currentUserId is not null)
+                sessionOptions.Metadata["userId"] = _currentUserId;
+            if (_redemptionId is not null)
+                sessionOptions.Metadata["redemptionId"] = _redemptionId;
 
-            await JS.InvokeVoidAsync("StripeCheckout.init", publicKey, session.ClientSecret);
-            stripeReady = true;
-            StateHasChanged();
+            // IMPORTANT: AllowPromotionCodes and Discounts are mutually exclusive in Stripe
+            if (couponId is not null)
+            {
+                sessionOptions.AllowPromotionCodes = null;
+                sessionOptions.Discounts = [new Stripe.Checkout.SessionDiscountOptions { Coupon = couponId }];
+            }
+            else
+            {
+                sessionOptions.AllowPromotionCodes = true;
+            }
+
+            // Step D: Create session and mount Stripe Elements
+            await CreateAndMountStripeSession(sessionOptions);
         }
         catch (Exception)
         {
-            errorMessage = "Unable to load payment form. Please refresh and try again.";
+            // Cancel loyalty reservation for any failure before mount
+            if (_redemptionId is not null && _currentUserId is not null)
+            {
+                try
+                {
+                    await LoyaltyService.CancelRedemptionAsync(_currentUserId, _redemptionId);
+                }
+                catch
+                {
+                    // Best-effort cancel — reservation will expire after 24h automatically
+                }
+                _redemptionId = null;
+                _appliedDiscount = 0;
+            }
+            _paymentInitiated = false;
+            errorMessage = "Unable to initialize payment. Please try again.";
+        }
+        finally
+        {
+            _stripeLoading = false;
             StateHasChanged();
         }
     }
 
+    private async Task CreateAndMountStripeSession(Stripe.Checkout.SessionCreateOptions sessionOptions)
+    {
+        var session = await StripeClient.V1.Checkout.Sessions.CreateAsync(sessionOptions);
+        stripeSessionId = session.Id;
+        var publicKey = Configuration["Stripe:Default:PublicKey"];
+
+        await JS.InvokeVoidAsync("StripeCheckout.init", publicKey, session.ClientSecret);
+        _stripeReady = true;
+        stripeInitialized = true;
+        StateHasChanged();
+    }
+
     private async Task HandleValidSubmit()
     {
-        if (!stripeReady)
+        if (!_stripeReady)
         {
             errorMessage = "Payment form is still loading. Please wait.";
             return;

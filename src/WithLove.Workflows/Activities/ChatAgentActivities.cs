@@ -5,7 +5,9 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Temporalio.Activities;
 using WithLove.Workflows.Chat;
+using WithLove.Workflows.Loyalty;
 using WithLove.Workflows.Telemetry;
+using WithLove.Workflows.Workflows;
 
 namespace WithLove.Workflows.Activities;
 
@@ -59,6 +61,11 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
         - Use navigate_to_cart when a customer wants to review their full cart.
         - Use navigate_to_checkout when a customer is ready to purchase.
         - Only navigate when the customer's intent clearly suggests it. Do not navigate proactively.
+
+        Love Tokens (loyalty points):
+        - If a customer asks about their Love Tokens balance, use view_loyalty_points to check.
+          You can view their balance but CANNOT redeem tokens on their behalf — redemption happens at checkout.
+          Tiers: Bronze (0–499 lifetime pts), Silver (500–1,999), Gold (2,000+). 1 token per $1 spent. 100 tokens = $1 off.
         """;
 
     // Collected cart actions during a single inference turn
@@ -73,6 +80,9 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
     // Mutable working copy of the cart — updated by cart tools so view_cart reflects mutations
     private WorkingCart _workingCart = new([]);
 
+    // Authenticated userId for the current inference turn
+    private string? _currentUserId;
+
     [Activity]
     public async Task<ChatInferenceResult> InferAsync(ChatInferenceInput input)
     {
@@ -81,6 +91,8 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
         _pendingNavigationActions.Clear();
         _currentCart = input.Cart ?? [];
         _workingCart = new WorkingCart(_currentCart);
+        _currentUserId = null;
+        _currentUserId = input.User?.UserId;
 
         // Build message history
         var messages = new List<ChatMessage> { new(ChatRole.System, SystemPrompt) };
@@ -178,6 +190,8 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
                 "Navigate the customer to their cart page."),
             AIFunctionFactory.Create(NavigateToCheckout, "navigate_to_checkout",
                 "Navigate the customer to the checkout page."),
+            AIFunctionFactory.Create(ViewLoyaltyPointsAsync, "view_loyalty_points",
+                "Get the current customer's Love Tokens balance, tier, and progress toward the next tier. Use when the customer asks about their points, balance, rewards, or tier status."),
         ];
     }
 
@@ -318,6 +332,45 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
         _pendingNavigationActions.Add(new NavigationAction(NavigationTarget.Checkout, "/checkout"));
         return Task.FromResult("Navigating to checkout.");
     }
+
+    private async Task<string> ViewLoyaltyPointsAsync()
+    {
+        if (string.IsNullOrEmpty(_currentUserId))
+            return "Love Tokens are available to logged-in customers. Sign in to see your balance and start earning!";
+
+        var logger = ActivityExecutionContext.Current.Logger;
+
+        try
+        {
+            var client = ActivityExecutionContext.Current.TemporalClient;
+            var handle = client.GetWorkflowHandle<LoyaltyAccountWorkflow>($"loyalty-{_currentUserId}");
+            var profile = await handle.QueryAsync(wf => wf.GetLoyaltyProfile());
+
+            var nextTierMsg = profile.Tier == LoyaltyTier.Gold
+                ? "You've reached the highest tier — Gold!"
+                : $"Earn {profile.PointsToNextTier} more to reach {NextTierName(profile.Tier)}.";
+
+            return $"You have {profile.Balance} Love Tokens ({profile.Tier} tier). {nextTierMsg} " +
+                   $"(Lifetime earned: {profile.LifetimeEarned} pts. Redeem at checkout: 100 pts = $1 off.)";
+        }
+        catch (Temporalio.Exceptions.RpcException ex)
+            when (ex.Code == Temporalio.Exceptions.RpcException.StatusCode.NotFound)
+        {
+            return "You don't have any Love Tokens yet. Complete a purchase to start earning — 1 token per $1 spent!";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Unable to load Love Tokens for user {UserId}", _currentUserId);
+            return "I couldn't load your Love Tokens balance right now. Please try again in a moment.";
+        }
+    }
+
+    private static string NextTierName(LoyaltyTier tier) => tier switch
+    {
+        LoyaltyTier.Bronze => "Silver",
+        LoyaltyTier.Silver => "Gold",
+        _ => "the next tier"
+    };
 
     /// <summary>
     /// Extracts a concise product summary from a single product JSON response.

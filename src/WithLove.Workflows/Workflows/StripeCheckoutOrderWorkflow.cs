@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 using WithLove.Workflows.Activities;
+using WithLove.Workflows.Loyalty;
 
 namespace WithLove.Workflows.Workflows;
 
@@ -40,6 +42,17 @@ public class StripeCheckoutOrderWorkflow
             BackoffCoefficient = 2.0f,
             MaximumInterval = TimeSpan.FromMinutes(1),
             MaximumAttempts = 5
+        }
+    };
+
+    private static readonly ActivityOptions LoyaltyActivityOptions = new()
+    {
+        StartToCloseTimeout = TimeSpan.FromMinutes(1),
+        RetryPolicy = new()
+        {
+            InitialInterval = TimeSpan.FromSeconds(2),
+            BackoffCoefficient = 2.0f,
+            MaximumAttempts = 3
         }
     };
 
@@ -83,10 +96,58 @@ public class StripeCheckoutOrderWorkflow
                 act.SendOrderConfirmationEmailAsync(orderInfo.ConfirmationNumber, sessionInfo.CustomerEmail, totalAmount),
             EmailActivityOptions);
 
+        // Step 5: Credit earned points if checkout belongs to a known customer
+        if (!string.IsNullOrEmpty(input.StripeCustomerId))
+        {
+            try
+            {
+                var userId = await Workflow.ExecuteActivityAsync(
+                    (LoyaltyActivities act) => act.ResolveUserIdByStripeCustomerIdAsync(input.StripeCustomerId),
+                    LoyaltyActivityOptions);
+
+                if (userId is not null)
+                {
+                    var points = (int)(sessionInfo.AmountTotal / 100); // $1 = 1 point
+                    await Workflow.ExecuteActivityAsync(
+                        (LoyaltyActivities act) => act.EnsureAndEarnPointsAsync(
+                            new EnsureLoyaltyInput(userId, sessionInfo.SessionId, orderInfo.ConfirmationNumber, points)),
+                        LoyaltyActivityOptions);
+                }
+            }
+            catch (ActivityFailureException)
+            {
+                Workflow.Logger.LogWarning(
+                    "Loyalty earn failed for Stripe customer {StripeCustomerId} — order complete",
+                    input.StripeCustomerId);
+            }
+        }
+
+        // Step 6: Commit pending loyalty redemption — uses userId from metadata, NOT from Step 5 lookup.
+        // Wrapped in try/catch: a loyalty commit failure must NOT fail a confirmed order workflow.
+        if (!string.IsNullOrEmpty(input.UserId) && !string.IsNullOrEmpty(input.RedemptionId))
+        {
+            try
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (LoyaltyActivities act) => act.CommitRedemptionAsync(input.UserId, input.RedemptionId),
+                    LoyaltyActivityOptions);
+            }
+            catch (ActivityFailureException)
+            {
+                Workflow.Logger.LogWarning(
+                    "Loyalty commit failed for redemption {RedemptionId} — order complete, reservation will expire",
+                    input.RedemptionId);
+            }
+        }
+
         Workflow.Logger.LogInformation(
             "Order processing workflow completed for {ConfirmationNumber}",
             orderInfo.ConfirmationNumber);
     }
 }
 
-public record CheckoutOrderInput(string CheckoutSessionId);
+public record CheckoutOrderInput(
+    string CheckoutSessionId,
+    string? StripeCustomerId = null,
+    string? RedemptionId = null,
+    string? UserId = null);

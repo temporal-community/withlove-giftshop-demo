@@ -47,8 +47,8 @@ public class ChatService(
         var name  = auth.User.FindFirst(ClaimTypes.Name)?.Value
                  ?? auth.User.FindFirst(ClaimTypes.GivenName)?.Value;
         var email = auth.User.FindFirst(ClaimTypes.Email)?.Value;
-        if (name is not null || email is not null)
-            _userContext = new UserContext(name, email);
+        if (name is not null || email is not null || userId is not null)
+            _userContext = new UserContext(name, email, userId);
 
         _initialized = true;
     }

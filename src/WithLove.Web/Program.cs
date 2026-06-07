@@ -145,6 +145,9 @@ builder.Services.AddScoped<ICartService, FusionCacheCartService>();
 // Register chat service (Temporal-backed conversational assistant)
 builder.Services.AddScoped<ChatService>();
 
+// Register loyalty service (Temporal-backed Love Tokens loyalty points)
+builder.Services.AddScoped<ILoyaltyService, TemporalLoyaltyService>();
+
 var connectOptions = ClientEnvConfig.LoadClientConnectOptions();
 builder.Services.AddTemporalClient(connectOptions.TargetHost, clientNamespace: connectOptions.Namespace);
 

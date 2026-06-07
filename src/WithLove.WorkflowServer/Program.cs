@@ -4,6 +4,7 @@ using Temporalio.Common.EnvConfig;
 using Temporalio.Extensions.Hosting;
 using WithLove.Data;
 using WithLove.Workflows.Activities;
+using WithLove.Workflows.Loyalty;
 using WithLove.Workflows.Workflows;
 using WithLove.WorkflowServer.Services;
 
@@ -76,10 +77,12 @@ builder.Services.AddHostedTemporalWorker(
     .AddScopedActivities<CustomerOnboardingActivities>()
     .AddScopedActivities<StripeCheckoutOrderActivities>()
     .AddScopedActivities<ChatAgentActivities>()
+    .AddScopedActivities<LoyaltyActivities>()
     .AddWorkflow<DatabaseSetupWorkflow>()
     .AddWorkflow<CustomerOnboardingWorkflow>()
     .AddWorkflow<StripeCheckoutOrderWorkflow>()
-    .AddWorkflow<ChatAgentWorkflow>();
+    .AddWorkflow<ChatAgentWorkflow>()
+    .AddWorkflow<LoyaltyAccountWorkflow>();
 
 // Trigger the database setup workflow on startup
 builder.Services.AddHostedService<DatabaseSetupHostedService>();

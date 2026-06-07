@@ -4,7 +4,7 @@ namespace WithLove.Workflows.Chat;
 public record ChatRequest(string UserMessage, List<CartSnapshot>? Cart = null, UserContext? User = null);
 
 /// <summary>Authenticated user identity passed to the AI for personalisation.</summary>
-public record UserContext(string? Name, string? Email);
+public record UserContext(string? Name, string? Email, string? UserId = null);
 
 /// <summary>Returned from workflow update to client.</summary>
 public record ChatResponse(string AssistantMessage, List<CartAction> CartActions, List<NavigationAction> NavigationActions);

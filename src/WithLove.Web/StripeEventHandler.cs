@@ -21,7 +21,12 @@ public class StripeEventHandler(ITemporalClient temporalClient, StripeWebhookCon
     {
         var checkoutSession = (e.Data.Object as Stripe.Checkout.Session)!;
         var workflowId = $"process-order-{checkoutSession.Id}";
-        var input = new CheckoutOrderInput(checkoutSession.Id);
+        var metadata = checkoutSession.Metadata;
+        var input = new CheckoutOrderInput(
+            checkoutSession.Id,
+            checkoutSession.CustomerId,
+            metadata?.GetValueOrDefault("redemptionId"),
+            metadata?.GetValueOrDefault("userId"));
 
         try
         {

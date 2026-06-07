@@ -55,6 +55,21 @@ public class DatabaseActivities(
             END
             """);
         logger.LogInformation("Ensured full-text catalog and index exist on Products table");
+
+        // Index for loyalty point lookup: ResolveUserIdByStripeCustomerIdAsync runs on every order
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = 'IX_AspNetUsers_StripeCustomerId'
+                AND object_id = OBJECT_ID('AspNetUsers')
+            )
+            BEGIN
+                CREATE INDEX IX_AspNetUsers_StripeCustomerId
+                ON AspNetUsers (StripeCustomerId)
+                WHERE StripeCustomerId IS NOT NULL
+            END");
+
+        logger.LogInformation("Ensured index IX_AspNetUsers_StripeCustomerId exists on AspNetUsers table");
     }
 
     [Activity]
