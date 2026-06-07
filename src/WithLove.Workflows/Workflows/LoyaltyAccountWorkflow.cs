@@ -13,22 +13,11 @@ namespace WithLove.Workflows.Workflows;
 [Workflow]
 public partial class LoyaltyAccountWorkflow
 {
-    // Single state object — use LoyaltyState.Empty, not new(...) — constructor has 7 params, Tier is derived
     private LoyaltyState _state = LoyaltyState.Empty;
 
-    // _stateChanged: set by every mutating signal/update so the expiry loop recalculates
-    // nextExpiry after a new reservation is added. Without this, a workflow with no pending
-    // reservations would not recalculate its expiry deadline when a new reservation arrives.
+    // Set by every mutating handler so the expiry loop recalculates nextExpiry on the next iteration.
+    // Without this a newly added reservation would not shorten an active idle wait.
     private bool _stateChanged;
-
-    // No separate _processedSessionIds field — _state.ProcessedEarnSessionIds is the
-    // authoritative idempotency set. Use it directly; no cache, no rebuild-on-restore needed.
-    //
-    // NOTE: LoyaltyState uses mutable HashSet<string> and Dictionary<string,PendingRedemption>
-    // as record fields. `with` expressions perform shallow copies — unlisted fields share the same
-    // collection reference. In-place .Add() on these collections is safe because the workflow is
-    // single-threaded (Temporal guarantees one coroutine at a time). This is an intentional
-    // trade-off: consistency and clarity over strict record immutability.
 
     [WorkflowRun]
     public async Task RunAsync(LoyaltyState? carriedState = null)
@@ -37,13 +26,9 @@ public partial class LoyaltyAccountWorkflow
 
         LogAccountStarted(Workflow.Logger, Workflow.Info.WorkflowId);
 
-        // Loop: wake on signals/updates (via _stateChanged), OR when a pending reservation
-        // deadline arrives, OR when ContinueAsNew is suggested.
-        // _stateChanged ensures the loop recalculates nextExpiry after every mutation —
-        // e.g., a new ReservePointsAsync must switch from idle waiting to a 24h expiry deadline.
         while (!Workflow.ContinueAsNewSuggested)
         {
-            _stateChanged = false; // reset before each wait
+            _stateChanged = false;
 
             var nextExpiry = _state.PendingRedemptions.Values
                 .Select(r => r.InitiatedAt.AddHours(24))
@@ -53,7 +38,6 @@ public partial class LoyaltyAccountWorkflow
 
             if (nextExpiry.HasValue)
             {
-                // Timed wait: wake when the nearest reservation expires, or when state changes
                 var timeout = nextExpiry.Value - Workflow.UtcNow;
                 await Workflow.WaitConditionAsync(
                     () => Workflow.ContinueAsNewSuggested || HasExpiredReservations() || _stateChanged,
@@ -61,19 +45,16 @@ public partial class LoyaltyAccountWorkflow
             }
             else
             {
-                // No pending reservations: wait indefinitely for a signal/update or ContinueAsNew.
-                // Avoid scheduling/cancelling artificial long timers just to stay alive.
+                // No pending reservations — no timer needed; signals/updates wake via _stateChanged.
                 await Workflow.WaitConditionAsync(
                     () => Workflow.ContinueAsNewSuggested || _stateChanged);
             }
 
-            ExpireStaleReservations(); // no-op if nothing expired
-            // loop continues: recalculates nextExpiry with fresh _state
+            ExpireStaleReservations();
         }
 
         LogContinuingAsNew(Workflow.Logger, Workflow.Info.WorkflowId);
 
-        // Expire any remaining stale reservations before carrying state forward
         throw Workflow.CreateContinueAsNewException(
             (LoyaltyAccountWorkflow wf) => wf.RunAsync(
                 _state.TrimAndExpire(Workflow.UtcNow.AddHours(-24))));
@@ -81,14 +62,10 @@ public partial class LoyaltyAccountWorkflow
 
     // ─── Signals ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// EARN — fire-and-forget, idempotent by StripeSessionId.
-    /// Credits points after a confirmed purchase. ProcessedEarnSessionIds prevents double-crediting.
-    /// </summary>
+    /// <summary>Credits points after a confirmed purchase. Idempotent by StripeSessionId.</summary>
     [WorkflowSignal]
     public Task EarnPointsAsync(EarnPointsInput input)
     {
-        // _state.ProcessedEarnSessionIds is authoritative — mutate in place (single-threaded)
         if (!_state.ProcessedEarnSessionIds.Add(input.StripeSessionId))
         {
             LogDuplicateEarnIgnored(Workflow.Logger, input.StripeSessionId);
@@ -112,25 +89,19 @@ public partial class LoyaltyAccountWorkflow
         };
 
         LogPointsEarned(Workflow.Logger, input.Points, input.StripeSessionId, _state.Balance);
-        _stateChanged = true; // wake the expiry loop to recalculate
+        _stateChanged = true;
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// COMMIT — payment confirmed, write final transaction.
-    /// Idempotent: no-op if already committed or cancelled/expired.
-    /// </summary>
+    /// <summary>Writes the final redemption transaction once payment is confirmed. Idempotent.</summary>
     [WorkflowSignal]
     public Task CommitRedemptionAsync(string redemptionId)
     {
-        // Idempotency: no-op if already committed or cancelled/expired
         if (_state.CommittedRedemptionIds.Contains(redemptionId)) return Task.CompletedTask;
         if (_state.CancelledRedemptionIds.Contains(redemptionId)) return Task.CompletedTask;
-        // No-op if not pending — handles late/duplicate webhook commits without failing the activity
+        // Remove from pending; safe no-op for late/duplicate webhook deliveries.
         if (!_state.PendingRedemptions.Remove(redemptionId, out var pending)) return Task.CompletedTask;
 
-        // Use captured `pending` for points/discount details.
-        // Move from PendingRedemptions → CommittedRedemptionIds, write PointTransaction.
         _state.CommittedRedemptionIds.Add(redemptionId);
         _state = _state with
         {
@@ -151,21 +122,14 @@ public partial class LoyaltyAccountWorkflow
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// CANCEL — payment failed/abandoned, restore balance.
-    /// Idempotent: no-op if already cancelled or committed.
-    /// </summary>
+    /// <summary>Restores balance when a payment fails or is abandoned. Idempotent.</summary>
     [WorkflowSignal]
     public Task CancelRedemptionAsync(string redemptionId)
     {
-        // Idempotency: no-op if already cancelled or committed
         if (_state.CancelledRedemptionIds.Contains(redemptionId)) return Task.CompletedTask;
         if (_state.CommittedRedemptionIds.Contains(redemptionId)) return Task.CompletedTask;
-        // No-op if not pending — handles duplicate cancel signals gracefully
         if (!_state.PendingRedemptions.Remove(redemptionId, out var pending)) return Task.CompletedTask;
 
-        // Use captured `pending` for restore amount.
-        // Move from PendingRedemptions → CancelledRedemptionIds, restore balance.
         _state.CancelledRedemptionIds.Add(redemptionId);
         _state = _state with
         {
@@ -193,32 +157,23 @@ public partial class LoyaltyAccountWorkflow
     }
 
     /// <summary>
-    /// RESERVE — holds points, returns RedemptionId.
-    /// Synchronous (Update) to prevent overdraft atomically.
-    /// Does NOT write a PointTransaction yet — that happens at CommitRedemptionAsync.
+    /// Holds points against a pending Stripe checkout. Returns a RedemptionId the caller
+    /// stores in Stripe session metadata for durable commit via <see cref="CommitRedemptionAsync"/>.
+    /// No PointTransaction is written until commit — balance is deducted as a hold only.
     /// </summary>
     [WorkflowUpdate]
     public Task<ReservationResult> ReservePointsAsync(ReservePointsInput input)
     {
-        // RedemptionId generated here — Workflow.NewGuid() is deterministic/replay-safe
+        // Workflow.NewGuid() is deterministic and replay-safe; never use Guid.NewGuid() in workflow code.
         var redemptionId = Workflow.NewGuid().ToString();
-        var discountAmount = input.PointsRequested / 100m; // 100 points = $1
+        var discountAmount = input.PointsRequested / 100m; // 100 pts = $1
 
-        var pending = new PendingRedemption(
-            redemptionId,
-            input.PointsRequested,
-            discountAmount,
-            Workflow.UtcNow);
-
-        // Deduct balance and add to PendingRedemptions
-        _state = _state with
-        {
-            Balance = _state.Balance - input.PointsRequested
-        };
-        _state.PendingRedemptions[redemptionId] = pending;
+        _state = _state with { Balance = _state.Balance - input.PointsRequested };
+        _state.PendingRedemptions[redemptionId] = new PendingRedemption(
+            redemptionId, input.PointsRequested, discountAmount, Workflow.UtcNow);
 
         LogPointsReserved(Workflow.Logger, input.PointsRequested, redemptionId);
-        _stateChanged = true; // wake the expiry loop — new reservation shortens next deadline
+        _stateChanged = true;
 
         return Task.FromResult(new ReservationResult(true, redemptionId, input.PointsRequested, discountAmount));
     }
@@ -231,7 +186,6 @@ public partial class LoyaltyAccountWorkflow
     [WorkflowQuery]
     public LoyaltyProfile GetLoyaltyProfile()
     {
-        // PointsToNextTier: derived from LifetimeEarned toward next threshold
         var pointsToNextTier = _state.Tier switch
         {
             LoyaltyTier.Bronze => 500 - _state.LifetimeEarned,
@@ -252,41 +206,29 @@ public partial class LoyaltyAccountWorkflow
 
     // ─── Private helpers ──────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true if any pending reservation has passed its 24-hour expiry deadline.
-    /// Uses AddHours(24) &lt;= UtcNow to match ExpireStaleReservations cutoff logic exactly.
-    /// </summary>
     private bool HasExpiredReservations() =>
         _state.PendingRedemptions.Values.Any(r => r.InitiatedAt.AddHours(24) <= Workflow.UtcNow);
 
-    /// <summary>
-    /// Expires all pending reservations older than 24 hours, restoring balance and moving
-    /// their IDs to CancelledRedemptionIds so late commits are safe no-ops.
-    /// </summary>
+    // Restores balance for all reservations past their 24h deadline and moves their IDs into
+    // CancelledRedemptionIds so any late CommitRedemptionAsync signal is a safe no-op.
     private void ExpireStaleReservations()
     {
-        var cutoff = Workflow.UtcNow.AddHours(-24);
-        // Use <= to match HasExpiredReservations predicate — consistent at the exact 24h boundary
+        var cutoff = Workflow.UtcNow.AddHours(-24); // <= matches HasExpiredReservations exactly
         var expired = _state.PendingRedemptions.Values.Where(r => r.InitiatedAt <= cutoff).ToList();
         if (expired.Count == 0) return;
 
-        // Move expired redemptionIds into CancelledRedemptionIds so that a late
-        // CommitRedemptionAsync is a safe no-op rather than silently writing a bad transaction.
-        // CancelRedemptionAsync on an already-cancelled id is also a no-op via the same set.
         var expiredIds = expired.Select(r => r.RedemptionId).ToHashSet();
-
         _state = _state with
         {
             Balance = _state.Balance + expired.Sum(r => r.Points),
             PendingRedemptions = _state.PendingRedemptions
                 .Where(kv => kv.Value.InitiatedAt > cutoff)
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
-            // Collection expression target-types to HashSet<string> here, not List<string>.
             CancelledRedemptionIds = [.. _state.CancelledRedemptionIds, .. expiredIds]
         };
     }
 
-    // ─── Replay-safe logger source gen (partial methods) ──────────────────────
+    // ─── Structured log methods — Workflow.Logger suppresses duplicates on replay ─
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Loyalty account started: {WorkflowId}")]
     private static partial void LogAccountStarted(ILogger logger, string workflowId);

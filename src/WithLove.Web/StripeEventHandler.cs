@@ -30,11 +30,8 @@ public class StripeEventHandler(ITemporalClient temporalClient, StripeWebhookCon
 
         try
         {
-            Logger.LogInformation(
-                "Starting order processing workflow for checkout session {SessionId}",
-                checkoutSession.Id);
+            Logger.StartingOrderProcessingWorkflow(checkoutSession.Id);
 
-            // Fire-and-forget: start workflow without waiting for completion
             await temporalClient.StartWorkflowAsync(
                 (StripeCheckoutOrderWorkflow wf) => wf.RunAsync(input),
                 new WorkflowOptions(workflowId, WorkflowConstants.DefaultTaskQueue)
@@ -47,23 +44,15 @@ public class StripeEventHandler(ITemporalClient temporalClient, StripeWebhookCon
                         .ToSearchAttributeCollection()
                 });
 
-            Logger.LogInformation(
-                "Order processing workflow started for session {SessionId} with WorkflowId {WorkflowId}",
-                checkoutSession.Id,
-                workflowId);
+            Logger.OrderProcessingWorkflowStarted(checkoutSession.Id, workflowId);
         }
         catch (WorkflowAlreadyStartedException ex)
         {
-            Logger.LogWarning(
-                "Order processing workflow already started for session {SessionId}. RunId: {RunId}",
-                checkoutSession.Id,
-                ex.RunId);
+            Logger.OrderProcessingWorkflowAlreadyStarted(checkoutSession.Id, ex.RunId);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex,
-                "Failed to start order processing workflow for session {SessionId}",
-                checkoutSession.Id);
+            Logger.FailedToStartOrderProcessingWorkflow(ex, checkoutSession.Id);
             throw;
         }
     }

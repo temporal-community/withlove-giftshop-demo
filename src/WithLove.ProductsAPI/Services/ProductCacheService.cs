@@ -111,27 +111,26 @@ public partial class ProductCacheService : IProductCacheService
     {
         var cacheKey = $"{ProductKeyPrefix}{productId}";
         await _cache.RemoveAsync(cacheKey);
-        _logger.LogInformation("Invalidated cache for product {ProductId}", productId);
+        _logger.InvalidatedProductCache(productId);
     }
 
     public async Task InvalidateProductListCacheAsync()
     {
-        // Remove the main product list cache pattern
         await _cache.RemoveAsync(ProductListKey);
-        _logger.LogInformation("Invalidated product list cache");
+        _logger.InvalidatedProductListCache();
     }
 
     public async Task InvalidateCategoryCacheAsync(int categoryId)
     {
         var cacheKey = $"{ProductCategoryKeyPrefix}{categoryId}";
         await _cache.RemoveAsync(cacheKey);
-        _logger.LogInformation("Invalidated cache for category {CategoryId}", categoryId);
+        _logger.InvalidatedCategoryCache(categoryId);
     }
 
     public async Task InvalidateSearchCacheAsync()
     {
         await _cache.RemoveByTagAsync("search");
-        _logger.LogInformation("Invalidated all search caches");
+        _logger.InvalidatedSearchCaches();
     }
 
     private async Task<Product?> FetchProductByIdAsync(int id, CancellationToken cancellationToken)
@@ -178,7 +177,7 @@ public partial class ProductCacheService : IProductCacheService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in FetchProductListAsync: {Message}", ex.Message);
+            _logger.FetchProductListFailed(ex, ex.Message);
             throw;
         }
     }
@@ -222,7 +221,6 @@ public partial class ProductCacheService : IProductCacheService
 
         using var activity = _instrumentation.ActivitySource.StartActivity("product.search");
 
-        // --- Full-text search (keyword matching) ---
         List<(int ProductId, int Rank)> ftsResults;
         var ftsUsedFallback = false;
         try
@@ -238,8 +236,7 @@ public partial class ProductCacheService : IProductCacheService
         }
         catch (Exception ex)
         {
-            // FTS may not be available (index not created yet, FTS service not running).
-            // Fall back to LIKE-based search.
+            // Full-text search can be unavailable before SQL Server finishes indexing.
             LogSearchFtsFallback(_logger, ex);
             ftsUsedFallback = true;
             var fallbackRaw = await _dbContext.Products
@@ -252,9 +249,7 @@ public partial class ProductCacheService : IProductCacheService
             ftsResults = fallbackRaw.Select((r, i) => (r.Id, Rank: i + 1)).ToList();
         }
 
-        // --- Vector search (semantic matching) ---
-        // Cosine distance threshold: 0 = identical, 2 = opposite.
-        // Results beyond this cutoff are too dissimilar to be relevant.
+        // Cosine distance ranges from 0 (identical) to 2 (opposite).
         const float maxCosineDistance = 0.8f;
 
         List<(int ProductId, int Rank)> vectorResults = [];
@@ -279,7 +274,6 @@ public partial class ProductCacheService : IProductCacheService
             LogSearchVectorFailed(_logger, ex);
         }
 
-        // --- Reciprocal Rank Fusion (RRF) merge ---
         var rankedIds = MergeWithRrf(ftsResults, vectorResults);
 
         var strategy = ftsUsedFallback ? "fallback_like"
@@ -302,7 +296,6 @@ public partial class ProductCacheService : IProductCacheService
 
         var total = rankedIds.Count;
 
-        // Apply pagination to the ranked IDs
         var pageIds = rankedIds
             .Skip(Math.Max(0, (pageNumber - 1) * pageSize))
             .Take(Math.Max(1, pageSize))
@@ -311,14 +304,12 @@ public partial class ProductCacheService : IProductCacheService
         if (pageIds.Count == 0)
             return new CachedPage<Product>([], total);
 
-        // Fetch full product entities for the page
         var products = await _dbContext.Products
             .AsNoTracking()
             .Include(p => p.Category)
             .Where(p => pageIds.Contains(p.Id))
             .ToListAsync(cancellationToken);
 
-        // Preserve RRF ranking order
         var orderedProducts = pageIds
             .Select(id => products.FirstOrDefault(p => p.Id == id))
             .Where(p => p != null)
@@ -328,10 +319,7 @@ public partial class ProductCacheService : IProductCacheService
         return new CachedPage<Product>(orderedProducts, total);
     }
 
-    /// <summary>
-    /// Merges two ranked result lists using Reciprocal Rank Fusion (RRF).
-    /// Products appearing in both lists get boosted scores.
-    /// </summary>
+    /// <summary>Merges ranked search results using Reciprocal Rank Fusion.</summary>
     internal static List<int> MergeWithRrf(
         List<(int ProductId, int Rank)> primaryResults,
         List<(int ProductId, int Rank)> secondaryResults,
@@ -363,7 +351,7 @@ public partial class ProductCacheService : IProductCacheService
             "price asc" => query.OrderBy(p => p.Price),
             "price desc" => query.OrderByDescending(p => p.Price),
             "addeddate asc" => query.OrderBy(p => p.AddedDate),
-            _ => query.OrderByDescending(p => p.AddedDate) // default: newest first
+            _ => query.OrderByDescending(p => p.AddedDate)
         };
     }
 

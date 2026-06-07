@@ -10,7 +10,6 @@ using WithLove.WorkflowServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Aspire service defaults (resilience)
 builder.AddServiceDefaults();
 
 builder.ConfigureOpenTelemetry()
@@ -23,13 +22,10 @@ builder.ConfigureOpenTelemetry()
         metrics.AddMeter(Instrumentation.ActivitySourceName);
     });
 
-// Health Checks
 builder.AddDefaultHealthChecks();
 
-// Add Stripe services
 builder.Services.AddStripe();
 
-// Register EF Core with the Aspire-injected connection string
 builder.Services.AddDbContext<ProductsDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("productsDatabase"),
@@ -45,28 +41,23 @@ builder.EnrichSqlServerDbContext<ProductsDbContext>(
         settings.CommandTimeout = 60;
     });
 
-// Register embedding generator (OpenAI text-embedding-3-small)
 var openaiKey = builder.Configuration.GetValue<string>("OPENAI_API_KEY", string.Empty);
 builder.Services.AddEmbeddingGenerator<string, Embedding<float>>(
     new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", openaiKey)
         .AsIEmbeddingGenerator());
 
-// Register IChatClient for chat assistant (gpt-5-nano with function invocation)
 builder.Services.AddChatClient(
     new OpenAI.Chat.ChatClient("gpt-5-nano", openaiKey).AsIChatClient())
     .UseFunctionInvocation();
 
-// Register HttpClient for ProductsAPI access (Aspire service discovery)
 builder.Services.AddHttpClient("productsApi", client =>
 {
     client.BaseAddress = new Uri("https+http://productsApi");
     client.DefaultRequestHeaders.Add("X-WITHLOVE-API-VERSION", DateTime.Today.ToString("yyyy-MM-dd"));
 });
 
-// Add custom instrumentation for manual tracing
 builder.Services.AddSingleton<Instrumentation>();
 
-// Configure Temporal worker with activities and workflow
 var connectOptions = ClientEnvConfig.LoadClientConnectOptions();
 
 builder.Services.AddHostedTemporalWorker(
@@ -84,7 +75,6 @@ builder.Services.AddHostedTemporalWorker(
     .AddWorkflow<ChatAgentWorkflow>()
     .AddWorkflow<LoyaltyAccountWorkflow>();
 
-// Trigger the database setup workflow on startup
 builder.Services.AddHostedService<DatabaseSetupHostedService>();
 
 var app = builder.Build();

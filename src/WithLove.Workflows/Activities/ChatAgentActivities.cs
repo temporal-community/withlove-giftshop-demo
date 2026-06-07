@@ -360,7 +360,7 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Unable to load Love Tokens for user {UserId}", _currentUserId);
+            logger.UnableToLoadLoveTokens(ex, _currentUserId);
             return "I couldn't load your Love Tokens balance right now. Please try again in a moment.";
         }
     }

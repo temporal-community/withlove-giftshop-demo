@@ -8,20 +8,13 @@ using WithLove.Workflows.Workflows;
 
 namespace WithLove.Web.Services;
 
-/// <summary>
-/// Implements ILoyaltyService by talking directly to LoyaltyAccountWorkflow via ITemporalClient.
-/// One workflow per user, identified by "loyalty-{userId}". Lazy-started on first interaction.
-/// </summary>
+/// <summary>Temporal-backed Love Tokens client. Workflow ID: loyalty-{userId}.</summary>
 public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<TemporalLoyaltyService> logger)
     : ILoyaltyService
 {
     private string WorkflowId(string userId) => $"loyalty-{userId}";
 
-    /// <summary>
-    /// Starts the loyalty workflow for the user with UseExisting conflict policy.
-    /// Safe to call redundantly — idempotent. Logs a warning on failure rather than throwing,
-    /// because a query after a failed start will surface its own error with context.
-    /// </summary>
+    /// <summary>Starts the loyalty workflow if needed before sending an Update.</summary>
     private async Task EnsureWorkflowAsync(string userId, CancellationToken ct)
     {
         try
@@ -35,9 +28,7 @@ public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<Temp
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex,
-                "Failed to ensure loyalty workflow for user {UserId} — continuing anyway",
-                userId);
+            logger.FailedToEnsureLoyaltyWorkflow(ex, userId);
         }
     }
 
@@ -51,7 +42,6 @@ public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<Temp
         }
         catch (RpcException ex) when (ex.Code == RpcException.StatusCode.NotFound)
         {
-            // New user — no workflow started yet. Return null so callers show "0 pts" gracefully.
             return null;
         }
     }
@@ -71,12 +61,10 @@ public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<Temp
         {
             var handle = temporalClient.GetWorkflowHandle<LoyaltyAccountWorkflow>(WorkflowId(userId));
             var history = await handle.QueryAsync(wf => wf.GetTransactionHistory());
-            // Return the most recent `limit` entries (workflow stores oldest-first)
             return history.TakeLast(limit).ToList();
         }
         catch (RpcException ex) when (ex.Code == RpcException.StatusCode.NotFound)
         {
-            // New user — no workflow yet, no history.
             return [];
         }
     }
@@ -85,7 +73,6 @@ public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<Temp
     public async Task<ReservationResult> ReservePointsAsync(
         string userId, int pointsRequested, CancellationToken ct = default)
     {
-        // Lazy-start the workflow before sending the Update — Update requires a running workflow.
         await EnsureWorkflowAsync(userId, ct);
 
         var handle = temporalClient.GetWorkflowHandle<LoyaltyAccountWorkflow>(WorkflowId(userId));

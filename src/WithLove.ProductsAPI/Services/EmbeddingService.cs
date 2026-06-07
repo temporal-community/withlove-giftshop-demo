@@ -6,19 +6,13 @@ using WithLove.Data.Models;
 
 namespace WithLove.ProductsAPI.Services;
 
-/// <summary>
-/// Generates and stores vector embeddings for products using OpenAI text-embedding-3-small.
-/// Embeddings are used for semantic (vector) search in the hybrid search pipeline.
-/// </summary>
+/// <summary>Generates product and query embeddings for hybrid search.</summary>
 public class EmbeddingService(
     IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
     ProductsDbContext dbContext,
     ILogger<EmbeddingService> logger)
 {
-    /// <summary>
-    /// Builds a text representation of a product for embedding generation.
-    /// Concatenates all searchable fields into a single string.
-    /// </summary>
+    /// <summary>Builds the searchable text sent to the embedding model.</summary>
     public static string GenerateEmbeddingText(Product product)
     {
         var parts = new List<string> { product.Name };
@@ -44,9 +38,7 @@ public class EmbeddingService(
         return string.Join(". ", parts);
     }
 
-    /// <summary>
-    /// Generate and save embedding for a single product.
-    /// </summary>
+    /// <summary>Generates and saves one product embedding.</summary>
     public async Task EmbedProductAsync(Product product, CancellationToken cancellationToken = default)
     {
         var text = GenerateEmbeddingText(product);
@@ -58,13 +50,10 @@ public class EmbeddingService(
         product.Embedding = new SqlVector<float>(vector);
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Generated embedding for product {ProductId}: {ProductName}", product.Id, product.Name);
+        logger.GeneratedProductEmbedding(product.Id, product.Name);
     }
 
-    /// <summary>
-    /// Backfill embeddings for all products that don't have one yet.
-    /// Called on startup to seed existing products.
-    /// </summary>
+    /// <summary>Backfills embeddings for products that do not have one.</summary>
     public async Task EmbedAllProductsAsync(CancellationToken cancellationToken = default)
     {
         var products = await dbContext.Products
@@ -74,13 +63,12 @@ public class EmbeddingService(
 
         if (products.Count == 0)
         {
-            logger.LogInformation("All products already have embeddings");
+            logger.ProductsAlreadyEmbedded();
             return;
         }
 
-        logger.LogInformation("Generating embeddings for {Count} products", products.Count);
+        logger.GeneratingEmbeddings(products.Count);
 
-        // Batch embed for efficiency
         var texts = products.Select(GenerateEmbeddingText).ToList();
         var results = await embeddingGenerator.GenerateAsync(texts, cancellationToken: cancellationToken);
 
@@ -91,13 +79,10 @@ public class EmbeddingService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Generated embeddings for {Count} products", products.Count);
+        logger.GeneratedEmbeddings(products.Count);
     }
 
-    /// <summary>
-    /// Generate an embedding vector for a search query string.
-    /// Used at search time to compare against product embeddings.
-    /// </summary>
+    /// <summary>Generates a search query embedding.</summary>
     public async Task<SqlVector<float>> GenerateQueryEmbeddingAsync(string query, CancellationToken cancellationToken = default)
     {
         var result = await embeddingGenerator.GenerateAsync(

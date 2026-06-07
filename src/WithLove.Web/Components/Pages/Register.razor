@@ -164,9 +164,8 @@
 
         if (result.Succeeded)
         {
-            Logger.LogInformation("User {Email} created a new account.", Input.Email);
+            Logger.UserCreatedAccount(Input.Email);
             
-            //Todo: consider moving this to a background service that listens on a channel, to decouple it from the registration flow and improve performance
             await TemporalClient.StartWorkflowAsync((CustomerOnboardingWorkflow wf) => wf.RunAsync(new(Input.FullName, Input.Email)),
                 new WorkflowOptions($"customer-onboarding-{Input.Email}", WorkflowConstants.DefaultTaskQueue)
             {
@@ -182,8 +181,7 @@
             {
                 _errorMessages.Add(error.Description);
             }
-            Logger.LogWarning("Failed registration attempt for {Email}: {Errors}",
-                Input.Email, string.Join("; ", _errorMessages));
+            Logger.FailedRegistrationAttempt(Input.Email, string.Join("; ", _errorMessages));
         }
     }
 

@@ -17,7 +17,6 @@ using ZiggyCreatures.Caching.Fusion.Backplane.StackExchangeRedis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Aspire service defaults (resilience)
 builder.AddServiceDefaults();
 
 builder.ConfigureOpenTelemetry()
@@ -32,13 +31,10 @@ builder.ConfigureOpenTelemetry()
         metrics.AddFusionCacheInstrumentation();
     });
 
-// Health Checks
 builder.AddDefaultHealthChecks();
 
-// Add validation support for Minimal APIs
 builder.Services.AddValidation();
 
-// Add Entity Framework Core with SQL Server and Aspire integration
 builder.Services.AddDbContext<ProductsDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("productsDatabase"),
@@ -62,7 +58,6 @@ builder.Services.AddIdentityCore<ShopUser>(options =>
 
         options.User.RequireUniqueEmail = true;
         
-        // Relax default password settings.
         options.Password.RequireDigit = false;
         options.Password.RequireLowercase = false;
         options.Password.RequireNonAlphanumeric = false;
@@ -82,30 +77,27 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-// Note: This needs to be called after AddAuthentication().AddIdentityCookies() so it can configure the correct cookie options
+// Must run after AddIdentityCookies so it updates the application cookie scheme.
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/login";
     options.LogoutPath = "/logout";
-    options.AccessDeniedPath = "/access-denied"; //TODO: Implement this page to show when users are denied access due to authorization policies
+    options.AccessDeniedPath = "/access-denied";
 
-    // Security & Persistence
     options.Cookie.HttpOnly = true;
-    options.ExpireTimeSpan = TimeSpan.FromDays(2); // How long they stay logged in
+    options.ExpireTimeSpan = TimeSpan.FromDays(2);
     options.SlidingExpiration = true;
 });
 
 builder.Services.AddAuthorizationBuilder();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
-// Add custom instrumentation for manual tracing
 builder.Services.AddSingleton<Instrumentation>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .RegisterPersistentService<AnonymousCartSession>(RenderMode.InteractiveServer);
 
-// Register FusionCache with Redis backplane
 builder.Services.AddMemoryCache();
 builder.AddRedisDistributedCache(connectionName: "redisCache");
 
@@ -123,29 +115,21 @@ builder.Services.AddFusionCache()
         Configuration = builder.Configuration.GetConnectionString("redisCache")
     }));
 
-// Register product service (HTTP-based with Aspire service discovery)
 builder.Services.AddHttpClient<IProductService, ProductApiService>(client =>
 {
-    // Use https+http:// scheme for development (try HTTPS first, fall back to HTTP)
-    // In production, this would be https:// only
     client.BaseAddress = new Uri("https+http://productsApi");
 
-    // Set required API version header (YYYY-MM-DD format)
     client.DefaultRequestHeaders.Add("X-WITHLOVE-API-VERSION", DateTime.Today.ToString("yyyy-MM-dd"));
 });
 
 builder.Services.AddStripe();
 
-// Register anonymous cart session (scoped: one per SignalR circuit, shared between middleware and components)
 builder.Services.AddScoped<AnonymousCartSession>();
 
-// Register cart service (with FusionCache persistence)
 builder.Services.AddScoped<ICartService, FusionCacheCartService>();
 
-// Register chat service (Temporal-backed conversational assistant)
 builder.Services.AddScoped<ChatService>();
 
-// Register loyalty service (Temporal-backed Love Tokens loyalty points)
 builder.Services.AddScoped<ILoyaltyService, TemporalLoyaltyService>();
 
 var connectOptions = ClientEnvConfig.LoadClientConnectOptions();

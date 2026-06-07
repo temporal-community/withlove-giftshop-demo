@@ -21,11 +21,11 @@ public class DatabaseActivities(
 
         if (created)
         {
-            logger.LogInformation("Database schema created successfully");
+            logger.DatabaseSchemaCreated();
             return new MigrationResult(1, "Database schema created successfully");
         }
 
-        logger.LogInformation("Database already exists, no changes made");
+        logger.DatabaseAlreadyExists();
         return new MigrationResult(0, "Database already exists");
     }
 
@@ -34,7 +34,6 @@ public class DatabaseActivities(
     {
         var logger = ActivityExecutionContext.Current.Logger;
 
-        // Create full-text catalog if it doesn't exist
         await dbContext.Database.ExecuteSqlRawAsync("""
             IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = 'WithLoveCatalog')
             BEGIN
@@ -42,7 +41,6 @@ public class DatabaseActivities(
             END
             """);
 
-        // Create full-text index on Products (Name, Description) if it doesn't exist
         await dbContext.Database.ExecuteSqlRawAsync("""
             IF NOT EXISTS (
                 SELECT 1 FROM sys.fulltext_indexes
@@ -54,9 +52,8 @@ public class DatabaseActivities(
                     WITH CHANGE_TRACKING AUTO;
             END
             """);
-        logger.LogInformation("Ensured full-text catalog and index exist on Products table");
+        logger.EnsuredProductSearchIndexes();
 
-        // Index for loyalty point lookup: ResolveUserIdByStripeCustomerIdAsync runs on every order
         await dbContext.Database.ExecuteSqlRawAsync(@"
             IF NOT EXISTS (
                 SELECT 1 FROM sys.indexes
@@ -69,7 +66,7 @@ public class DatabaseActivities(
                 WHERE StripeCustomerId IS NOT NULL
             END");
 
-        logger.LogInformation("Ensured index IX_AspNetUsers_StripeCustomerId exists on AspNetUsers table");
+        logger.EnsuredStripeCustomerIndex();
     }
 
     [Activity]
@@ -86,25 +83,21 @@ public class DatabaseActivities(
             await dbContext.SaveChangesAsync();
             
             categoriesSeeded = categories.Count;
-            logger.LogInformation("Seeded {Count} categories", categoriesSeeded);
+            logger.SeededCategories(categoriesSeeded);
         }
         else
         {
-            logger.LogInformation("Categories already exist, skipping category seeding");
+            logger.CategoriesAlreadySeeded();
         }
 
         if (!await dbContext.Products.AnyAsync())
         {
-            // Ensure categories are tracked — they may already be in Local from the
-            // seeding above, or we need to load them if they existed before this run.
             if (!dbContext.Categories.Local.Any())
                 await dbContext.Categories.LoadAsync();
 
             var categoryByName = dbContext.Categories.Local.ToDictionary(c => c.Name);
             var products = SeedData.GetSeedProducts(categoryByName);
 
-            // Create a matching Stripe product + price for each seed product and
-            // capture the price ID before persisting so it's saved in one round-trip.
             var stripeProductService = stripeClient.V1.Products;
             var stripePriceService = stripeClient.V1.Prices;
 
@@ -129,24 +122,21 @@ public class DatabaseActivities(
                     DefaultPrice = stripePrice.Id,
                 };
                 
-                // Set the default price on the Stripe product
                 await stripeProductService.UpdateAsync(stripeProduct.Id, productOptions);
 
                 product.StripePriceId = stripePrice.Id;
 
-                logger.LogInformation(
-                    "Created Stripe product {StripeProductId} / price {StripePriceId} for '{ProductName}'",
-                    stripeProduct.Id, stripePrice.Id, product.Name);
+                logger.CreatedStripeProduct(stripeProduct.Id, stripePrice.Id, product.Name);
             }
 
             dbContext.Products.AddRange(products);
             await dbContext.SaveChangesAsync();
             productsSeeded = products.Count;
-            logger.LogInformation("Seeded {Count} products", productsSeeded);
+            logger.SeededProducts(productsSeeded);
         }
         else
         {
-            logger.LogInformation("Products already exist, skipping product seeding");
+            logger.ProductsAlreadySeeded();
         }
 
         return new SeedResult(categoriesSeeded, productsSeeded);
@@ -164,11 +154,11 @@ public class DatabaseActivities(
 
         if (products.Count == 0)
         {
-            logger.LogInformation("All products already have embeddings");
+            logger.ProductsAlreadyEmbedded();
             return new EmbeddingResult(0);
         }
 
-        logger.LogInformation("Generating embeddings for {Count} products", products.Count);
+        logger.GeneratingEmbeddings(products.Count);
 
         var texts = products.Select(GenerateEmbeddingText).ToList();
         var results = await embeddingGenerator.GenerateAsync(texts);
@@ -179,7 +169,7 @@ public class DatabaseActivities(
         }
 
         await dbContext.SaveChangesAsync();
-        logger.LogInformation("Generated embeddings for {Count} products", products.Count);
+        logger.GeneratedEmbeddings(products.Count);
 
         return new EmbeddingResult(products.Count);
     }

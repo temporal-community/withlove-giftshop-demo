@@ -45,7 +45,7 @@
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Unable to load account dropdown Love Tokens balance for user {UserId}", userId);
+                Logger.UnableToLoadAccountDropdownBalance(ex, userId);
             }
         }
     }

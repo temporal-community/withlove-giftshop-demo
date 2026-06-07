@@ -12,7 +12,6 @@ using ZiggyCreatures.Caching.Fusion.Backplane.StackExchangeRedis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Aspire service defaults (resilience)
 builder.AddServiceDefaults();
 
 builder.ConfigureOpenTelemetry()
@@ -27,10 +26,8 @@ builder.ConfigureOpenTelemetry()
         metrics.AddFusionCacheInstrumentation();
     });
 
-// Health Checks
 builder.AddDefaultHealthChecks();
 
-// Add Entity Framework Core with SQL Server and Aspire integration
 builder.Services.AddDbContext<ProductsDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("productsDatabase"),
@@ -46,16 +43,12 @@ builder.EnrichSqlServerDbContext<ProductsDbContext>(
         settings.CommandTimeout = 20;
     });
 
-// Add validation support for Minimal APIs
 builder.Services.AddValidation();
 
-// Add custom instrumentation for manual tracing
 builder.Services.AddSingleton<Instrumentation>();
 
-// Add OpenAPI documentation
 builder.Services.AddOpenApi();
 
-// Add caching
 builder.Services.AddMemoryCache();
 builder.AddRedisDistributedCache(connectionName: "redisCache");
 
@@ -78,35 +71,28 @@ builder.Services.AddFusionCache()
             { Configuration = builder.Configuration.GetConnectionString("redisCache") })
     );
 
-// Register embedding generator (OpenAI text-embedding-3-small)
 var openaiKey = builder.Configuration["OPENAI_API_KEY"] ?? "";
 builder.Services.AddEmbeddingGenerator<string, Embedding<float>>(
     new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", openaiKey)
         .AsIEmbeddingGenerator());
 
-// Register embedding service (used for query-time embedding generation)
 builder.Services.AddScoped<EmbeddingService>();
 
-// Register caching services
 builder.Services.AddScoped<IProductCacheService, ProductCacheService>();
 
 var app = builder.Build();
 
-// Global error handling middleware (must be early in pipeline)
+// Keep this first so downstream middleware returns Problem Details on failure.
 app.UseErrorHandling();
 
-// Add standard response headers (security and caching)
 app.UseResponseHeaders();
 
-// Map default Aspire endpoints (health checks)
 app.MapHealthCheckEndpoints();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 
-    // Map Scalar API reference (default path: /scalar)
     app.MapScalarApiReference(options =>
     {
         options.AddDocument("v1", "WithLove Products API v1");
@@ -119,7 +105,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Map API endpoints with versioning filter
 app.MapProductEndpoints();
 
 app.MapCategoryEndpoints();
