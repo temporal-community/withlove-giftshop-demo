@@ -3,30 +3,18 @@ using ZiggyCreatures.Caching.Fusion;
 
 namespace WithLove.Web.Services;
 
-/// <summary>
-/// FusionCache-backed cart service with hybrid model:
-/// - In-memory snapshot for fast synchronous reads
-/// - Async FusionCache (L1 memory + L2 Redis) for persistence
-///
-/// On mutation: update local snapshot immediately, fire OnChange (instant UI),
-/// then await write to FusionCache (fire-and-forget pattern).
-///
-/// Cache key format: cart:{userId}
-/// TTL: 30 days (abandoned cart support)
-/// </summary>
+/// <summary>FusionCache-backed cart with an in-memory snapshot for synchronous UI reads.</summary>
 public class FusionCacheCartService : ICartService
 {
     private readonly IFusionCache _cache;
     private readonly ILogger<FusionCacheCartService> _logger;
 
-    // Local in-memory snapshot
     private List<CartItem> _items = [];
     private List<GiftEnhancement> _enhancements = [];
     private string _cacheKey = "";
 
     public event Action? OnChange;
 
-    // Synchronous computed reads from local snapshot
     public IReadOnlyList<CartItem> Items => _items.AsReadOnly();
     public int ItemCount => _items.Sum(i => i.Quantity);
     public decimal Subtotal => _items.Sum(i => i.Price * i.Quantity);
@@ -40,16 +28,11 @@ public class FusionCacheCartService : ICartService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>
-    /// Initialize cart from FusionCache or start with empty cart.
-    /// If anonymousCartId is provided and differs from userId, merges the anonymous cart
-    /// into the user's cart and removes the anonymous cart key.
-    /// </summary>
+    /// <summary>Loads the cart and merges an anonymous cart when supplied.</summary>
     public async Task InitializeAsync(string userId, string? anonymousCartId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
 
-        // Already initialized in this scope (e.g., CartBadge already called this)
         if (!string.IsNullOrEmpty(_cacheKey))
             return;
 
@@ -82,13 +65,13 @@ public class FusionCacheCartService : ICartService
                     }
                     await PersistAsync();
                     await _cache.RemoveAsync(anonKey);
-                    _logger.LogInformation("Merged anonymous cart {AnonKey} into {UserKey}", anonKey, _cacheKey);
+                    _logger.MergedAnonymousCart(anonKey, _cacheKey);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load cart for userId: {UserId}. Starting with empty cart.", userId);
+            _logger.FailedToLoadCart(ex, userId);
             _items = [];
             _enhancements = [];
         }
@@ -96,10 +79,7 @@ public class FusionCacheCartService : ICartService
         OnChange?.Invoke();
     }
 
-    /// <summary>
-    /// Add item to cart (merge quantity if product already exists).
-    /// Updates local snapshot immediately, fires OnChange, then persists to cache.
-    /// </summary>
+    /// <summary>Adds an item, merging quantity when the product already exists.</summary>
     public async Task AddItemAsync(CartItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -118,9 +98,7 @@ public class FusionCacheCartService : ICartService
         await PersistAsync();
     }
 
-    /// <summary>
-    /// Remove all quantities of a product from cart.
-    /// </summary>
+    /// <summary>Removes all quantities of a product.</summary>
     public async Task RemoveItemAsync(int productId)
     {
         _items.RemoveAll(i => i.ProductId == productId);
@@ -128,9 +106,7 @@ public class FusionCacheCartService : ICartService
         await PersistAsync();
     }
 
-    /// <summary>
-    /// Update quantity for a product. Removes item if quantity <= 0.
-    /// </summary>
+    /// <summary>Updates quantity, removing the item when quantity is zero.</summary>
     public async Task UpdateQuantityAsync(int productId, int quantity)
     {
         var item = _items.FirstOrDefault(i => i.ProductId == productId);
@@ -150,9 +126,7 @@ public class FusionCacheCartService : ICartService
         await PersistAsync();
     }
 
-    /// <summary>
-    /// Toggle a gift enhancement on/off. If not selected, adds it; if selected, removes it.
-    /// </summary>
+    /// <summary>Toggles a gift enhancement.</summary>
     public async Task ToggleEnhancementAsync(GiftEnhancement enhancement)
     {
         ArgumentNullException.ThrowIfNull(enhancement);
@@ -167,9 +141,7 @@ public class FusionCacheCartService : ICartService
         await PersistAsync();
     }
 
-    /// <summary>
-    /// Clear all items and enhancements from cart.
-    /// </summary>
+    /// <summary>Clears items and enhancements.</summary>
     public async Task ClearAsync()
     {
         _items.Clear();
@@ -178,9 +150,7 @@ public class FusionCacheCartService : ICartService
         await PersistAsync();
     }
 
-    /// <summary>
-    /// Persist current cart state to FusionCache with 30-day TTL.
-    /// </summary>
+    /// <summary>Persists the current cart state with a 30-day TTL.</summary>
     private async Task PersistAsync()
     {
         try
@@ -194,9 +164,7 @@ public class FusionCacheCartService : ICartService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to persist cart state to cache for key: {CacheKey}", _cacheKey);
-            // Don't throw — cache failure shouldn't break the app.
-            // User still has local snapshot; persistence will retry on next mutation.
+            _logger.FailedToPersistCart(ex, _cacheKey);
         }
     }
 }

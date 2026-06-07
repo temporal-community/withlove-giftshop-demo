@@ -10,7 +10,7 @@ public class CustomerOnboardingWorkflow
     [WorkflowRun]
     public async Task RunAsync(CustomerOnboardingInput input)
     {
-        Workflow.Logger.LogInformation("Starting onboarding workflow for customer {CustomerId}", input.CustomerEmail);
+        Workflow.Logger.StartingOnboarding(input.CustomerEmail);
 
         var stripeCustomerResult= await Workflow.ExecuteActivityAsync((CustomerOnboardingActivities ac) => 
                 ac.CreateStripeCustomerAsync(new(input.CustomerName, input.CustomerEmail )),
@@ -40,9 +40,9 @@ public class CustomerOnboardingWorkflow
                 }
             });
       
-        Workflow.Logger.LogInformation("Completed onboarding workflow for customer {CustomerId}", input.CustomerEmail);
+        Workflow.Logger.CompletedOnboarding(input.CustomerEmail);
     }
     
 }
 
-public record CustomerOnboardingInput(string CustomerName, string CustomerEmail); 
+public record CustomerOnboardingInput(string CustomerName, string CustomerEmail);

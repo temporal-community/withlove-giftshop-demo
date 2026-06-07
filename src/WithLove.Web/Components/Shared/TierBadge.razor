@@ -1,0 +1,27 @@
+@using WithLove.Workflows.Loyalty
+
+@if (Tier.HasValue)
+{
+    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider @TierClasses">
+        <span class="material-symbols-outlined text-sm">@TierIcon</span>
+        @Tier.Value.ToString()
+    </span>
+}
+
+@code {
+    [Parameter] public LoyaltyTier? Tier { get; set; }
+
+    private string TierClasses => Tier switch
+    {
+        LoyaltyTier.Bronze => "bg-amber-100 text-amber-800",
+        LoyaltyTier.Silver => "bg-stone-200 text-stone-600",
+        LoyaltyTier.Gold   => "bg-yellow-100 text-yellow-700",
+        _                  => "bg-stone-100 text-stone-500"
+    };
+
+    private string TierIcon => Tier switch
+    {
+        LoyaltyTier.Gold => "workspace_premium",
+        _                => "favorite"
+    };
+}

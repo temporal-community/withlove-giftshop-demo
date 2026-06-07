@@ -28,24 +28,7 @@
                 <AuthorizeView>
                     <Authorized>
                         <div class="relative group">
-                            <button class="text-primary hover:text-primary-dark transition-colors relative flex items-center focus:outline-none">
-                                <span class="material-symbols-outlined font-light text-xl">account_circle</span>
-                            </button>
-                            <div class="account-dropdown absolute right-0 top-full mt-2 w-48 bg-white border border-stone-100 rounded-lg shadow-md opacity-0 invisible transform -translate-y-2 transition-all duration-200 z-50 overflow-hidden">
-                                <div class="flex flex-col py-1">
-                                    <a href="/account/profile" class="flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 hover:text-primary transition-colors">
-                                        <span class="material-symbols-outlined font-light text-lg">person</span>
-                                        Profile
-                                    </a>
-                                    <form method="post" action="/logout">
-                                        <AntiforgeryToken />
-                                        <button type="submit" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 hover:text-primary transition-colors">
-                                            <span class="material-symbols-outlined font-light text-lg">logout</span>
-                                            Log Out
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
+                            <AccountDropdown />
                         </div>
                     </Authorized>
                     <NotAuthorized>

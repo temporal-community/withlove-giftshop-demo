@@ -38,6 +38,23 @@
                 <span class="text-stone-800 font-medium">@EnhancementsTotal.ToString("C")</span>
             </div>
         }
+        @if (AvailablePoints > 0)
+        {
+            <div class="flex justify-between text-sm items-center">
+                <span class="text-stone-500 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-base text-primary">favorite</span>
+                    Love Tokens
+                </span>
+                <span class="text-xs text-primary font-medium">@AvailablePoints pts available</span>
+            </div>
+        }
+        @if (PointsDiscount > 0)
+        {
+            <div class="flex justify-between text-sm">
+                <span class="text-stone-500">Token Discount</span>
+                <span class="font-medium text-green-600">-@PointsDiscount.ToString("C")</span>
+            </div>
+        }
         <div class="flex justify-between text-sm">
             <span class="text-stone-500">Shipping</span>
             <span class="text-stone-400 italic text-xs">TBD</span>
@@ -46,7 +63,7 @@
         <div class="flex justify-between">
             <span class="font-bold text-stone-800">Estimated Total</span>
             <span class="font-display text-xl text-stone-800">
-                @((Subtotal + EnhancementsTotal).ToString("C"))
+                @((Subtotal + EnhancementsTotal - PointsDiscount).ToString("C"))
             </span>
         </div>
     </div>
@@ -61,4 +78,10 @@
 
     [Parameter]
     public decimal EnhancementsTotal { get; set; }
+
+    [Parameter]
+    public int AvailablePoints { get; set; }
+
+    [Parameter]
+    public decimal PointsDiscount { get; set; }
 }

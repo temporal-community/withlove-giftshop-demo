@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 using WithLove.Workflows.Activities;
+using WithLove.Workflows.Loyalty;
 
 namespace WithLove.Workflows.Workflows;
 
@@ -43,50 +45,89 @@ public class StripeCheckoutOrderWorkflow
         }
     };
 
+    private static readonly ActivityOptions LoyaltyActivityOptions = new()
+    {
+        StartToCloseTimeout = TimeSpan.FromMinutes(1),
+        RetryPolicy = new()
+        {
+            InitialInterval = TimeSpan.FromSeconds(2),
+            BackoffCoefficient = 2.0f,
+            MaximumAttempts = 3
+        }
+    };
+
     [WorkflowRun]
     public async Task RunAsync(CheckoutOrderInput input)
     {
-        Workflow.Logger.LogInformation(
-            "Starting order processing workflow for session {SessionId}",
-            input.CheckoutSessionId);
+        Workflow.Logger.StartingOrderWorkflow(input.CheckoutSessionId);
 
-        // Step 1: Retrieve checkout session details from Stripe
         var sessionInfo = await Workflow.ExecuteActivityAsync(
             (StripeCheckoutOrderActivities act) => act.GetCheckoutSessionAsync(input.CheckoutSessionId),
             StripeActivityOptions);
 
-        Workflow.Logger.LogInformation(
-            "Retrieved session for {Email}, amount {Amount}",
-            sessionInfo.CustomerEmail,
-            sessionInfo.AmountTotal);
+        Workflow.Logger.RetrievedSession(sessionInfo.CustomerEmail, sessionInfo.AmountTotal);
 
-        // Step 2: Create order record and initiate fulfillment
         var orderInfo = await Workflow.ExecuteActivityAsync(
             (StripeCheckoutOrderActivities act) => act.ProvisionOrderAsync(sessionInfo),
             OrderActivityOptions);
 
-        Workflow.Logger.LogInformation(
-            "Order provisioned: {ConfirmationNumber}, tracking: {Tracking}",
-            orderInfo.ConfirmationNumber,
-            orderInfo.TrackingNumber);
+        Workflow.Logger.OrderProvisioned(orderInfo.ConfirmationNumber, orderInfo.TrackingNumber);
 
-        // Step 3: Update order status to "confirmed"
         var confirmedOrder = orderInfo with { Status = "CONFIRMED" };
         await Workflow.ExecuteActivityAsync(
             (StripeCheckoutOrderActivities act) => act.UpdateOrderStatusAsync(confirmedOrder),
             OrderActivityOptions);
 
-        // Step 4: Send confirmation email to customer
         var totalAmount = sessionInfo.AmountTotal / 100m;
         await Workflow.ExecuteActivityAsync(
             (StripeCheckoutOrderActivities act) =>
                 act.SendOrderConfirmationEmailAsync(orderInfo.ConfirmationNumber, sessionInfo.CustomerEmail, totalAmount),
             EmailActivityOptions);
 
-        Workflow.Logger.LogInformation(
-            "Order processing workflow completed for {ConfirmationNumber}",
-            orderInfo.ConfirmationNumber);
+        if (!string.IsNullOrEmpty(input.StripeCustomerId))
+        {
+            try
+            {
+                var userId = await Workflow.ExecuteActivityAsync(
+                    (LoyaltyActivities act) => act.ResolveUserIdByStripeCustomerIdAsync(input.StripeCustomerId),
+                    LoyaltyActivityOptions);
+
+                if (userId is not null)
+                {
+                    var points = (int)(sessionInfo.AmountTotal / 100); // $1 = 1 point
+                    await Workflow.ExecuteActivityAsync(
+                        (LoyaltyActivities act) => act.EnsureAndEarnPointsAsync(
+                            new EnsureLoyaltyInput(userId, sessionInfo.SessionId, orderInfo.ConfirmationNumber, points)),
+                        LoyaltyActivityOptions);
+                }
+            }
+            catch (ActivityFailureException)
+            {
+                Workflow.Logger.LoyaltyEarnFailed(input.StripeCustomerId);
+            }
+        }
+
+        // Commit by metadata userId; do not fail a paid order if loyalty is down.
+        if (!string.IsNullOrEmpty(input.UserId) && !string.IsNullOrEmpty(input.RedemptionId))
+        {
+            try
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (LoyaltyActivities act) => act.CommitRedemptionAsync(input.UserId, input.RedemptionId),
+                    LoyaltyActivityOptions);
+            }
+            catch (ActivityFailureException)
+            {
+                Workflow.Logger.LoyaltyCommitFailed(input.RedemptionId);
+            }
+        }
+
+        Workflow.Logger.OrderWorkflowCompleted(orderInfo.ConfirmationNumber);
     }
 }
 
-public record CheckoutOrderInput(string CheckoutSessionId);
+public record CheckoutOrderInput(
+    string CheckoutSessionId,
+    string? StripeCustomerId = null,
+    string? RedemptionId = null,
+    string? UserId = null);

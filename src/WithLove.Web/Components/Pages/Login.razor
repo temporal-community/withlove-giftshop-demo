@@ -156,13 +156,13 @@
 
         if (result.Succeeded)
         {
-            Logger.LogInformation("User {Email} logged in.", Input.Email);
+            Logger.UserLoggedIn(Input.Email);
             Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
         }
         else
         {
             _errorMessage = "Invalid email or password. Please try again.";
-            Logger.LogWarning("Failed login attempt for {Email}.", Input.Email);
+            Logger.FailedLoginAttempt(Input.Email);
         }
     }
 

@@ -10,7 +10,7 @@ public class DatabaseSetupWorkflow
     [WorkflowRun]
     public async Task<DatabaseSetupResult> RunAsync()
     { 
-        Workflow.Logger.LogInformation("Starting database setup workflow");
+        Workflow.Logger.StartingDatabaseSetup();
 
         var migrationResult = await Workflow.ExecuteActivityAsync(
             (DatabaseActivities act) => act.ApplyMigrationsAsync(),
@@ -26,11 +26,8 @@ public class DatabaseSetupWorkflow
                 }
             });
 
-        Workflow.Logger.LogInformation(
-            "Migration complete: {Count} applied — {Message}",
-            migrationResult.AppliedCount, migrationResult.Message);
+        Workflow.Logger.MigrationComplete(migrationResult.AppliedCount, migrationResult.Message);
 
-        // Apply schema upgrades (vector column, full-text index) — idempotent
         await Workflow.ExecuteActivityAsync(
             (DatabaseActivities act) => act.ApplySchemaUpgradesAsync(),
             new ActivityOptions
@@ -45,7 +42,7 @@ public class DatabaseSetupWorkflow
                 }
             });
 
-        Workflow.Logger.LogInformation("Schema upgrades applied successfully");
+        Workflow.Logger.SchemaUpgradesApplied();
 
         var seedResult = await Workflow.ExecuteActivityAsync(
             (DatabaseActivities act) => act.SeedDatabaseAsync(),
@@ -61,11 +58,8 @@ public class DatabaseSetupWorkflow
                 }
             });
 
-        Workflow.Logger.LogInformation(
-            "Seeding complete: {Categories} categories, {Products} products",
-            seedResult.CategoriesSeeded, seedResult.ProductsSeeded);
+        Workflow.Logger.SeedingComplete(seedResult.CategoriesSeeded, seedResult.ProductsSeeded);
 
-        // Generate vector embeddings for all products that don't have one yet
         var embeddingResult = await Workflow.ExecuteActivityAsync(
             (DatabaseActivities act) => act.GenerateEmbeddingsAsync(),
             new ActivityOptions
@@ -80,9 +74,7 @@ public class DatabaseSetupWorkflow
                 }
             });
 
-        Workflow.Logger.LogInformation(
-            "Embedding generation complete: {Count} products embedded",
-            embeddingResult.ProductsEmbedded);
+        Workflow.Logger.EmbeddingGenerationComplete(embeddingResult.ProductsEmbedded);
 
         return new DatabaseSetupResult(migrationResult, seedResult, embeddingResult);
     }

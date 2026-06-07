@@ -4,28 +4,17 @@ using WithLove.Web.Models;
 
 namespace WithLove.Web.Services;
 
-/// <summary>
-/// HTTP-based product service that calls WithLove.ProductsAPI microservice.
-/// Uses Aspire service discovery to automatically resolve the "productsapi" endpoint.
-/// Implements IProductService with API calls, DTO mapping, and client-side filtering.
-///
-/// Service Discovery: The HttpClient is configured with Aspire's service discovery,
-/// which automatically resolves "productsapi" to the ProductsAPI service running in Aspire.
-///
-/// Resilience: Built-in via ServiceDefaults configuration (retries, timeouts, circuit breaker).
-/// </summary>
+/// <summary>HTTP product client with local caching and DTO mapping.</summary>
 public class ProductApiService : IProductService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<ProductApiService> _logger;
     private readonly IMemoryCache _cache;
 
-    // Cache keys
     private const string CategoryCacheKey = "productapi:categories:all";
     private const string CategoryNameToIdMapKey = "productapi:category:nametoIdMap";
     private const string ProductsCacheKeyPrefix = "productapi:products";
 
-    // Cache duration
     private static readonly TimeSpan CategoryCacheDuration = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ProductsCacheDuration = TimeSpan.FromMinutes(15);
 
@@ -39,20 +28,18 @@ public class ProductApiService : IProductService
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
     }
 
-    /// <summary>
-    /// Get a single product by ID from the API.
-    /// </summary>
+    /// <summary>Gets a single product by ID.</summary>
     public async Task<Product?> GetProductAsync(int productId)
     {
         try
         {
-            _logger.LogDebug("Fetching product with ID: {ProductId}", productId);
+            _logger.FetchingProduct(productId);
 
             var response = await _httpClient.GetAsync($"/api/products/{productId}");
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch product {ProductId}: HTTP {StatusCode}", productId, response.StatusCode);
+                _logger.FailedToFetchProduct(productId, response.StatusCode);
                 return null;
             }
 
@@ -61,40 +48,35 @@ public class ProductApiService : IProductService
             var categoryMap = await GetCategoryNameToIdMappingAsync();
 
             var product = DtoMappers.MapProductResponse(productDto, categoryMap);
-            _logger.LogInformation("Successfully fetched product: {ProductId} - {ProductName}", productId, product.Name);
+            _logger.FetchedProduct(productId, product.Name);
 
             return product;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching product {ProductId}", productId);
+            _logger.ErrorFetchingProduct(ex, productId);
             return null;
         }
     }
 
-    /// <summary>
-    /// Get all products with default pagination (top=100).
-    /// Results are cached for performance.
-    /// </summary>
+    /// <summary>Gets all products with default pagination.</summary>
     public async Task<List<Product>> GetProductsAsync()
     {
         try
         {
-            _logger.LogDebug("Fetching all products");
+            _logger.FetchingProducts();
 
-            // Check cache first
             if (_cache.TryGetValue(ProductsCacheKeyPrefix, out List<Product>? cachedProducts))
             {
-                _logger.LogDebug("Returning products from cache");
+                _logger.ReturningProductsFromCache();
                 return cachedProducts ?? [];
             }
 
-            // Fetch from API with pagination
             var response = await _httpClient.GetAsync("/api/products?top=100&skip=0&orderBy=addedDate%20desc");
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch products: HTTP {StatusCode}", response.StatusCode);
+                _logger.FailedToFetchProducts(response.StatusCode);
                 return [];
             }
 
@@ -102,40 +84,36 @@ public class ProductApiService : IProductService
             var responseDto = JsonSerializer.Deserialize<JsonElement>(jsonContent);
             var categoryMap = await GetCategoryNameToIdMappingAsync();
 
-            // Map the response - extract the "value" array from PaginatedResponse<ProductResponse>
             var products = new List<Product>();
             if (responseDto.TryGetProperty("value", out var valueElement))
             {
                 products = DtoMappers.MapProductsResponse(valueElement, categoryMap);
             }
 
-            // Cache the results
             _cache.Set(ProductsCacheKeyPrefix, products, ProductsCacheDuration);
 
-            _logger.LogInformation("Successfully fetched {ProductCount} products", products.Count);
+            _logger.FetchedProducts(products.Count);
             return products;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching products");
+            _logger.ErrorFetchingProducts(ex);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get products in a specific category from the API.
-    /// </summary>
+    /// <summary>Gets products in a category.</summary>
     public async Task<List<Product>> GetProductsByCategoryAsync(int categoryId)
     {
         try
         {
-            _logger.LogDebug("Fetching products for category: {CategoryId}", categoryId);
+            _logger.FetchingProductsForCategory(categoryId);
 
             var response = await _httpClient.GetAsync($"/api/products/category/{categoryId}");
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch products for category {CategoryId}: HTTP {StatusCode}", categoryId, response.StatusCode);
+                _logger.FailedToFetchProductsForCategory(categoryId, response.StatusCode);
                 return [];
             }
 
@@ -143,37 +121,32 @@ public class ProductApiService : IProductService
             var responseDto = JsonSerializer.Deserialize<JsonElement>(jsonContent);
             var categoryMap = await GetCategoryNameToIdMappingAsync();
 
-            // Extract "value" array from PaginatedResponse<ProductResponse>
             var products = new List<Product>();
             if (responseDto.TryGetProperty("value", out var valueElement))
             {
                 products = DtoMappers.MapProductsResponse(valueElement, categoryMap);
             }
 
-            _logger.LogInformation("Successfully fetched {ProductCount} products for category {CategoryId}", products.Count, categoryId);
+            _logger.FetchedProductsForCategory(products.Count, categoryId);
             return products;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching products for category {CategoryId}", categoryId);
+            _logger.ErrorFetchingProductsForCategory(ex, categoryId);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get all categories from the API.
-    /// Results are cached for performance.
-    /// </summary>
+    /// <summary>Gets all categories.</summary>
     public async Task<List<Category>> GetCategoriesAsync()
     {
         try
         {
-            _logger.LogDebug("Fetching all categories");
+            _logger.FetchingCategories();
 
-            // Check cache first
             if (_cache.TryGetValue(CategoryCacheKey, out List<Category>? cachedCategories))
             {
-                _logger.LogDebug("Returning categories from cache");
+                _logger.ReturningCategoriesFromCache();
                 return cachedCategories ?? [];
             }
 
@@ -181,47 +154,43 @@ public class ProductApiService : IProductService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch categories: HTTP {StatusCode}", response.StatusCode);
+                _logger.FailedToFetchCategories(response.StatusCode);
                 return [];
             }
 
             var jsonContent = await response.Content.ReadAsStringAsync();
             var responseDto = JsonSerializer.Deserialize<JsonElement>(jsonContent);
 
-            // Extract "value" array from PaginatedResponse<CategoryResponse>
             var categories = new List<Category>();
             if (responseDto.TryGetProperty("value", out var valueElement))
             {
                 categories = DtoMappers.MapCategoriesResponse(valueElement);
             }
 
-            // Cache the results
             _cache.Set(CategoryCacheKey, categories, CategoryCacheDuration);
 
-            _logger.LogInformation("Successfully fetched {CategoryCount} categories", categories.Count);
+            _logger.FetchedCategories(categories.Count);
             return categories;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching categories");
+            _logger.ErrorFetchingCategories(ex);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get a single category by ID from the API.
-    /// </summary>
+    /// <summary>Gets a category by ID.</summary>
     public async Task<Category?> GetCategoryAsync(int categoryId)
     {
         try
         {
-            _logger.LogDebug("Fetching category with ID: {CategoryId}", categoryId);
+            _logger.FetchingCategory(categoryId);
 
             var response = await _httpClient.GetAsync($"/api/categories/{categoryId}");
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch category {CategoryId}: HTTP {StatusCode}", categoryId, response.StatusCode);
+                _logger.FailedToFetchCategory(categoryId, response.StatusCode);
                 return null;
             }
 
@@ -229,89 +198,77 @@ public class ProductApiService : IProductService
             var categoryJson = JsonSerializer.Deserialize<JsonElement>(jsonContent);
             var category = DtoMappers.MapCategoryResponse(categoryJson);
 
-            _logger.LogInformation("Successfully fetched category: {CategoryId} - {CategoryName}", categoryId, category.Name);
+            _logger.FetchedCategory(categoryId, category.Name);
             return category;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching category {CategoryId}", categoryId);
+            _logger.ErrorFetchingCategory(ex, categoryId);
             return null;
         }
     }
 
-    /// <summary>
-    /// Get featured products (client-side filtering from all products).
-    /// Featured products are: IDs 1 and 3.
-    /// </summary>
+    /// <summary>Gets featured products from the cached product list.</summary>
     public async Task<List<Product>> GetFeaturedProductsAsync()
     {
         try
         {
-            _logger.LogDebug("Fetching featured products");
+            _logger.FetchingFeaturedProducts();
 
             var allProducts = await GetProductsAsync();
             var featured = allProducts.Where(p => p.Id is 1 or 3).ToList();
 
-            _logger.LogInformation("Successfully fetched {FeaturedCount} featured products", featured.Count);
+            _logger.FetchedFeaturedProducts(featured.Count);
             return featured;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching featured products");
+            _logger.ErrorFetchingFeaturedProducts(ex);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get small luxury products (client-side filtering from all products).
-    /// Small luxuries are: IDs 4, 5, and 6.
-    /// </summary>
+    /// <summary>Gets small-luxury products from the cached product list.</summary>
     public async Task<List<Product>> GetSmallLuxuriesAsync()
     {
         try
         {
-            _logger.LogDebug("Fetching small luxury products");
+            _logger.FetchingSmallLuxuryProducts();
 
             var allProducts = await GetProductsAsync();
             var smallLuxuries = allProducts.Where(p => p.Id is 4 or 5 or 6).ToList();
 
-            _logger.LogInformation("Successfully fetched {SmallLuxuriesCount} small luxury products", smallLuxuries.Count);
+            _logger.FetchedSmallLuxuryProducts(smallLuxuries.Count);
             return smallLuxuries;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching small luxury products");
+            _logger.ErrorFetchingSmallLuxuryProducts(ex);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get product recommendations (client-side filtering from all products).
-    /// Recommendations are: IDs 4, 3, 6, and 11.
-    /// </summary>
+    /// <summary>Gets recommendation products from the cached product list.</summary>
     public async Task<List<Product>> GetRecommendationsAsync(int productId)
     {
         try
         {
-            _logger.LogDebug("Fetching recommendations for product {ProductId}", productId);
+            _logger.FetchingRecommendations(productId);
 
             var allProducts = await GetProductsAsync();
             var recommendations = allProducts.Where(p => p.Id is 4 or 3 or 6 or 11).ToList();
 
-            _logger.LogInformation("Successfully fetched {RecommendationCount} recommendations for product {ProductId}",
-                recommendations.Count, productId);
+            _logger.FetchedRecommendations(recommendations.Count, productId);
             return recommendations;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching recommendations for product {ProductId}", productId);
+            _logger.ErrorFetchingRecommendations(ex, productId);
             return [];
         }
     }
 
-    /// <summary>
-    /// Search products by name/description using the hybrid search API endpoint.
-    /// </summary>
+    /// <summary>Searches products by name and description.</summary>
     public async Task<List<Product>> SearchProductsAsync(string query, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -319,14 +276,14 @@ public class ProductApiService : IProductService
 
         try
         {
-            _logger.LogDebug("Searching products with query: {Query}", query);
+            _logger.SearchingProducts(query);
 
             var response = await _httpClient.GetAsync(
                 $"/api/products/search?q={Uri.EscapeDataString(query)}&top=20", cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Search failed: HTTP {StatusCode}", response.StatusCode);
+                _logger.SearchFailed(response.StatusCode);
                 return [];
             }
 
@@ -340,25 +297,22 @@ public class ProductApiService : IProductService
                 products = DtoMappers.MapProductsResponse(valueElement, categoryMap);
             }
 
-            _logger.LogInformation("Search for '{Query}' returned {Count} results", query, products.Count);
+            _logger.SearchReturnedResults(query, products.Count);
             return products;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug("Search cancelled for query: {Query}", query);
+            _logger.SearchCancelled(query);
             return [];
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching products with query: {Query}", query);
+            _logger.ErrorSearchingProducts(ex, query);
             return [];
         }
     }
 
-    /// <summary>
-    /// Get gift enhancements (hardcoded - no API endpoint available).
-    /// These are returned locally as they're not part of the ProductsAPI.
-    /// </summary>
+    /// <summary>Gets local gift enhancement options.</summary>
     public Task<List<GiftEnhancement>> GetGiftEnhancementsAsync()
     {
         var enhancements = new List<GiftEnhancement>
@@ -400,13 +354,9 @@ public class ProductApiService : IProductService
         return Task.FromResult(enhancements);
     }
 
-    /// <summary>
-    /// Get the category name to ID mapping for resolving category IDs from product responses.
-    /// Fetches all categories if not cached, then builds a dictionary for lookups.
-    /// </summary>
+    /// <summary>Maps category names from product responses to route IDs.</summary>
     private async Task<Dictionary<string, int>> GetCategoryNameToIdMappingAsync()
     {
-        // Check cache first
         if (_cache.TryGetValue(CategoryNameToIdMapKey, out Dictionary<string, int>? cachedMap))
         {
             return cachedMap ?? [];
@@ -417,14 +367,13 @@ public class ProductApiService : IProductService
             var categories = await GetCategoriesAsync();
             var mapping = categories.ToDictionary(c => c.Name, c => c.Id);
 
-            // Cache the mapping
             _cache.Set(CategoryNameToIdMapKey, mapping, CategoryCacheDuration);
 
             return mapping;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error building category name to ID mapping");
+            _logger.ErrorBuildingCategoryMap(ex);
             return [];
         }
     }

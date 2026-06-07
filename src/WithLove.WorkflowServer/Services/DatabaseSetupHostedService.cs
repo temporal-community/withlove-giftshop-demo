@@ -4,7 +4,6 @@ using Temporalio.Exceptions;
 using WithLove.Workflows.Activities;
 using WithLove.Workflows.Workflows;
 
-
 namespace WithLove.WorkflowServer.Services;
 
 public partial class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedService> logger) : BackgroundService
@@ -18,7 +17,7 @@ public partial class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedServi
         {
             var client = await ConnectWithRetryAsync(stoppingToken);
 
-            logger.LogInformation("Starting database setup workflow (ID: {WorkflowId})", WorkflowId);
+            LogStartingSetup(logger, WorkflowId);
 
             var handle = await client.StartWorkflowAsync(
                 (DatabaseSetupWorkflow wf) => wf.RunAsync(),
@@ -37,20 +36,36 @@ public partial class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedServi
         }
         catch (WorkflowAlreadyStartedException)
         {
-            logger.LogInformation(
-                "Database setup workflow ({WorkflowId}) already ran — skipping",
-                WorkflowId);
+            LogSetupAlreadyRan(logger, WorkflowId);
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(ex, "Database setup workflow failed");
+            LogSetupFailed(logger, ex);
             throw;
         }
     }
 
     [LoggerMessage(Level = LogLevel.Information,
+        Message = "Starting database setup workflow (ID: {WorkflowId})")]
+    private static partial void LogStartingSetup(ILogger logger, string workflowId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Database setup workflow ({WorkflowId}) already ran — skipping")]
+    private static partial void LogSetupAlreadyRan(ILogger logger, string workflowId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Database setup workflow failed")]
+    private static partial void LogSetupFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information,
         Message = "Database setup complete — Migrations: {MigrationCount} applied, Seeding: {Categories} categories, {Products} products, Embeddings: {Embeddings} generated")]
     private static partial void LogSetupCompleted(ILogger logger, int migrationCount, int categories, int products, int embeddings);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to Temporal at {Host}")]
+    private static partial void LogConnectedToTemporal(ILogger logger, string? host);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Temporal not ready (attempt {Attempt}/{Max}), retrying in {Delay}s...")]
+    private static partial void LogTemporalNotReady(ILogger logger, int attempt, int max, double delay);
 
     private async Task<TemporalClient> ConnectWithRetryAsync(CancellationToken stoppingToken)
     {
@@ -63,20 +78,18 @@ public partial class DatabaseSetupHostedService(ILogger<DatabaseSetupHostedServi
             try
             {
                 var client = await TemporalClient.ConnectAsync(connectOptions);
-                logger.LogInformation("Connected to Temporal at {Host}", connectOptions.TargetHost);
+                LogConnectedToTemporal(logger, connectOptions.TargetHost);
                 return client;
             }
             catch (RpcException) when (attempt < maxAttempts)
             {
-                logger.LogWarning(
-                    "Temporal not ready (attempt {Attempt}/{Max}), retrying in {Delay}s...",
-                    attempt, maxAttempts, delay.TotalSeconds);
+                LogTemporalNotReady(logger, attempt, maxAttempts, delay.TotalSeconds);
                 await Task.Delay(delay, stoppingToken);
                 delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
             }
         }
 
-        // Final attempt — let any exception propagate
+        // Final attempt: let connection errors fail startup.
         return await TemporalClient.ConnectAsync(connectOptions);
     }
 }
