@@ -45,13 +45,21 @@ public partial class ProductCacheService : IProductCacheService
     {
         var cacheKey = $"{ProductKeyPrefix}{id}";
 
-        var product = await _cache.GetOrSetAsync(
+        var cached = await _cache.TryGetAsync<Product?>(cacheKey, token: cancellationToken);
+        _instrumentation.CacheRequests.Add(1, new TagList
+        {
+            { "operation", "get_by_id" },
+            { "cache_result", cached.HasValue ? "hit" : "miss" },
+        });
+
+        if (cached.HasValue)
+            return cached.Value;
+
+        return await _cache.GetOrSetAsync(
             cacheKey,
             async (ctx) => await FetchProductByIdAsync(id, ctx),
             new FusionCacheEntryOptions { Duration = TimeSpan.FromMinutes(10) },
             cancellationToken);
-
-        return product;
     }
 
     public async Task<CachedPage<Product>> GetProductListAsync(
@@ -62,13 +70,21 @@ public partial class ProductCacheService : IProductCacheService
     {
         var cacheKey = $"{ProductListKey}:page{pageNumber}:size{pageSize}:order{orderBy.Replace(" ", "")}";
 
-        var result = await _cache.GetOrSetAsync(
+        var cached = await _cache.TryGetAsync<CachedPage<Product>>(cacheKey, token: cancellationToken);
+        _instrumentation.CacheRequests.Add(1, new TagList
+        {
+            { "operation", "list" },
+            { "cache_result", cached.HasValue ? "hit" : "miss" },
+        });
+
+        if (cached.HasValue)
+            return cached.Value;
+
+        return await _cache.GetOrSetAsync(
             cacheKey,
             async (ctx) => await FetchProductListAsync(pageNumber, pageSize, orderBy, ctx),
             new FusionCacheEntryOptions { Duration = TimeSpan.FromMinutes(5) },
             cancellationToken);
-
-        return result;
     }
 
     public async Task<CachedPage<Product>> GetProductsByCategoryAsync(
@@ -80,13 +96,23 @@ public partial class ProductCacheService : IProductCacheService
     {
         var cacheKey = $"{ProductCategoryKeyPrefix}{categoryId}:page{pageNumber}:size{pageSize}:order{orderBy.Replace(" ", "")}";
 
-        var result = await _cache.GetOrSetAsync(
+        _instrumentation.CategoryRequests.Add(1, new KeyValuePair<string, object?>("category_id", categoryId.ToString()));
+
+        var cached = await _cache.TryGetAsync<CachedPage<Product>>(cacheKey, token: cancellationToken);
+        _instrumentation.CacheRequests.Add(1, new TagList
+        {
+            { "operation", "by_category" },
+            { "cache_result", cached.HasValue ? "hit" : "miss" },
+        });
+
+        if (cached.HasValue)
+            return cached.Value;
+
+        return await _cache.GetOrSetAsync(
             cacheKey,
             async (ctx) => await FetchProductsByCategoryAsync(categoryId, pageNumber, pageSize, orderBy, ctx),
             new FusionCacheEntryOptions { Duration = TimeSpan.FromMinutes(5) },
             cancellationToken);
-
-        return result;
     }
 
     public async Task<CachedPage<Product>> SearchProductsAsync(
@@ -238,6 +264,7 @@ public partial class ProductCacheService : IProductCacheService
         {
             // Full-text search can be unavailable before SQL Server finishes indexing.
             LogSearchFtsFallback(_logger, ex);
+            _instrumentation.SearchFallbacks.Add(1);
             ftsUsedFallback = true;
             var fallbackRaw = await _dbContext.Products
                 .AsNoTracking()
@@ -272,6 +299,7 @@ public partial class ProductCacheService : IProductCacheService
         catch (Exception ex)
         {
             LogSearchVectorFailed(_logger, ex);
+            _instrumentation.VectorFailures.Add(1);
         }
 
         var rankedIds = MergeWithRrf(ftsResults, vectorResults);

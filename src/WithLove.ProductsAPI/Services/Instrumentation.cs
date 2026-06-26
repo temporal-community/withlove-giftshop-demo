@@ -14,6 +14,9 @@ public class Instrumentation : IDisposable
     public Counter<long> SearchRequests { get; }
     public Histogram<long> SearchResultCount { get; }
     public Counter<long> CacheRequests { get; }
+    public Counter<long> SearchFallbacks { get; }
+    public Counter<long> VectorFailures { get; }
+    public Counter<long> CategoryRequests { get; }
 
     public Instrumentation()
     {
@@ -31,6 +34,18 @@ public class Instrumentation : IDisposable
         CacheRequests = Meter.CreateCounter<long>(
             "product.cache.requests",
             description: "Number of product cache requests, tagged by outcome");
+
+        SearchFallbacks = Meter.CreateCounter<long>(
+            "product.search.fallback",
+            description: "FTS unavailable — degraded to LIKE search");
+
+        VectorFailures = Meter.CreateCounter<long>(
+            "product.search.vector_failure",
+            description: "Embedding generation failed — vector leg skipped");
+
+        CategoryRequests = Meter.CreateCounter<long>(
+            "product.category.requests",
+            description: "Product list requests by category");
     }
 
     public void Dispose()

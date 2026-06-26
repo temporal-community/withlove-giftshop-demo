@@ -15,6 +15,7 @@
 @inject UserManager<ShopUser> UserManager
 @inject ILoyaltyService LoyaltyService
 @inject IFusionCache FusionCache
+@inject WithLove.Web.Services.Instrumentation Instrumentation
 @implements IAsyncDisposable
 
 <PageTitle>Checkout | With Love</PageTitle>
@@ -343,6 +344,8 @@
                 _appliedDiscount = 0;
             }
         }
+
+        Instrumentation.CartItemsAtCheckout.Record(CartService.ItemCount);
 
         try
         {

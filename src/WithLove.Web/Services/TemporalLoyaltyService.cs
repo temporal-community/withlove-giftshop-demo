@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
@@ -9,7 +10,10 @@ using WithLove.Workflows.Workflows;
 namespace WithLove.Web.Services;
 
 /// <summary>Temporal-backed Love Tokens client. Workflow ID: loyalty-{userId}.</summary>
-public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<TemporalLoyaltyService> logger)
+public class TemporalLoyaltyService(
+    ITemporalClient temporalClient,
+    ILogger<TemporalLoyaltyService> logger,
+    Instrumentation instrumentation)
     : ILoyaltyService
 {
     private string WorkflowId(string userId) => $"loyalty-{userId}";
@@ -76,8 +80,11 @@ public class TemporalLoyaltyService(ITemporalClient temporalClient, ILogger<Temp
         await EnsureWorkflowAsync(userId, ct);
 
         var handle = temporalClient.GetWorkflowHandle<LoyaltyAccountWorkflow>(WorkflowId(userId));
-        return await handle.ExecuteUpdateAsync(
+        var sw = Stopwatch.StartNew();
+        var result = await handle.ExecuteUpdateAsync(
             wf => wf.ReservePointsAsync(new ReservePointsInput(pointsRequested)));
+        instrumentation.LoyaltyReserveDuration.Record(sw.ElapsedMilliseconds);
+        return result;
     }
 
     /// <inheritdoc />

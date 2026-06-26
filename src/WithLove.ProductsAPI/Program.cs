@@ -18,12 +18,22 @@ builder.ConfigureOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing.AddSource(Instrumentation.ActivitySourceName);
-        tracing.AddFusionCacheInstrumentation();
+        tracing.AddFusionCacheInstrumentation(opts =>
+        {
+            opts.IncludeMemoryLevel = true;
+            opts.IncludeDistributedLevel = true;
+            opts.IncludeBackplane = true;
+        });
     })
     .WithMetrics(metrics =>
     {
         metrics.AddMeter(Instrumentation.ActivitySourceName);
-        metrics.AddFusionCacheInstrumentation();
+        metrics.AddFusionCacheInstrumentation(opts =>
+        {
+            opts.IncludeMemoryLevel = true;
+            opts.IncludeDistributedLevel = true;
+            opts.IncludeBackplane = true;
+        });
     });
 
 builder.AddDefaultHealthChecks();

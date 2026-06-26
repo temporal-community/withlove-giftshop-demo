@@ -4,6 +4,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Microsoft.EntityFrameworkCore;
 using Temporalio.Common.EnvConfig;
+using Temporalio.Extensions.OpenTelemetry;
 using WithLove.Data;
 using WithLove.Data.Models;
 using WithLove.Web.Services;
@@ -23,12 +24,23 @@ builder.ConfigureOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing.AddSource(Instrumentation.ActivitySourceName);
-        tracing.AddFusionCacheInstrumentation();
+        tracing.AddSource(TracingInterceptor.ClientSource.Name);
+        tracing.AddFusionCacheInstrumentation(opts =>
+        {
+            opts.IncludeMemoryLevel = true;
+            opts.IncludeDistributedLevel = true;
+            opts.IncludeBackplane = true;
+        });
     })
     .WithMetrics(metrics =>
     {
         metrics.AddMeter(Instrumentation.ActivitySourceName);
-        metrics.AddFusionCacheInstrumentation();
+        metrics.AddFusionCacheInstrumentation(opts =>
+        {
+            opts.IncludeMemoryLevel = true;
+            opts.IncludeDistributedLevel = true;
+            opts.IncludeBackplane = true;
+        });
     });
 
 builder.AddDefaultHealthChecks();
@@ -139,7 +151,12 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ILoyaltyService, TemporalLoyaltyService>();
 
 var connectOptions = ClientEnvConfig.LoadClientConnectOptions();
-builder.Services.AddTemporalClient(connectOptions.TargetHost, clientNamespace: connectOptions.Namespace);
+builder.Services.AddTemporalClient(opts =>
+{
+    opts.TargetHost = connectOptions.TargetHost;
+    opts.Namespace = connectOptions.Namespace;
+    opts.Interceptors = [new TracingInterceptor()];
+});
 
 var app = builder.Build();
 

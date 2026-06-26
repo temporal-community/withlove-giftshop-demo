@@ -17,7 +17,8 @@ public record ChatMessageResult(string AssistantMessage, List<NavigationAction> 
 public class ChatService(
     ITemporalClient temporalClient,
     AuthenticationStateProvider authStateProvider,
-    ICartService cartService)
+    ICartService cartService,
+    Instrumentation instrumentation)
 {
     private string? _workflowId;
     private bool _initialized;
@@ -49,6 +50,9 @@ public class ChatService(
         var email = auth.User.FindFirst(ClaimTypes.Email)?.Value;
         if (name is not null || email is not null || userId is not null)
             _userContext = new UserContext(name, email, userId);
+
+        instrumentation.ChatSessionsStarted.Add(1,
+            new KeyValuePair<string, object?>("auth_type", userId is not null ? "authenticated" : "anonymous"));
 
         _initialized = true;
     }
@@ -154,6 +158,9 @@ public class ChatService(
     {
         foreach (var action in actions)
         {
+            instrumentation.ChatCartActions.Add(1,
+                new KeyValuePair<string, object?>("action", action.Type.ToString()));
+
             switch (action.Type)
             {
                 case CartActionType.Add:

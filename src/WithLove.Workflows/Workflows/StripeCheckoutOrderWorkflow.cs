@@ -89,6 +89,15 @@ public class StripeCheckoutOrderWorkflow
 
         Workflow.Logger.OrderProvisioned(orderInfo.ConfirmationNumber, orderInfo.TrackingNumber);
 
+        // AmountTotal is in cents (Stripe convention). Tagged to reveal loyalty programme lift.
+        Workflow.MetricMeter.CreateHistogram<long>("order.revenue", unit: "cents")
+            .Record(sessionInfo.AmountTotal, new[]
+            {
+                new KeyValuePair<string, object>(
+                    "loyalty_redemption_applied",
+                    !string.IsNullOrEmpty(input.RedemptionId)),
+            });
+
         var confirmedOrder = orderInfo with { Status = "CONFIRMED" };
         await Workflow.ExecuteActivityAsync(
             (StripeCheckoutOrderActivities act) => act.UpdateOrderStatusAsync(confirmedOrder),

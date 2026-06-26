@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Temporalio.Activities;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
+using Temporalio.Exceptions;
 using WithLove.Data;
 using WithLove.Workflows.Loyalty;
 using WithLove.Workflows.Workflows;
@@ -39,15 +40,32 @@ public class LoyaltyActivities(ProductsDbContext dbContext)
     {
         var logger = ActivityExecutionContext.Current.Logger;
         var client = ActivityExecutionContext.Current.TemporalClient;
+        var meter = ActivityExecutionContext.Current.MetricMeter;
 
         logger.EnsuringLoyaltyEarn(input.Points, input.UserId, input.StripeSessionId);
 
-        await client.StartWorkflowAsync(
-            (LoyaltyAccountWorkflow wf) => wf.RunAsync(null),
-            new WorkflowOptions($"loyalty-{input.UserId}", WorkflowConstants.DefaultTaskQueue)
-            {
-                IdConflictPolicy = WorkflowIdConflictPolicy.UseExisting
-            });
+        // Attempt to start a new workflow; if it already exists, use the existing one.
+        // This lets us detect account creation (new workflow) vs. an existing account.
+        var isNewAccount = false;
+        try
+        {
+            await client.StartWorkflowAsync(
+                (LoyaltyAccountWorkflow wf) => wf.RunAsync(null),
+                new WorkflowOptions($"loyalty-{input.UserId}", WorkflowConstants.DefaultTaskQueue)
+                {
+                    IdConflictPolicy = WorkflowIdConflictPolicy.Fail
+                });
+            isNewAccount = true;
+        }
+        catch (WorkflowAlreadyStartedException)
+        {
+            // Workflow is already running — this is an existing account.
+        }
+
+        if (isNewAccount)
+        {
+            meter.CreateCounter<long>("loyalty.account.created").Add(1);
+        }
 
         var handle = client.GetWorkflowHandle<LoyaltyAccountWorkflow>($"loyalty-{input.UserId}");
         await handle.SignalAsync(wf => wf.EarnPointsAsync(
@@ -62,11 +80,16 @@ public class LoyaltyActivities(ProductsDbContext dbContext)
     {
         var logger = ActivityExecutionContext.Current.Logger;
         var client = ActivityExecutionContext.Current.TemporalClient;
+        var meter = ActivityExecutionContext.Current.MetricMeter;
 
         logger.CommittingRedemption(redemptionId, userId);
 
         var handle = client.GetWorkflowHandle<LoyaltyAccountWorkflow>($"loyalty-{userId}");
         await handle.SignalAsync(wf => wf.CommitRedemptionAsync(redemptionId));
+
+        // Tier is not available in this activity's input — use "unknown" to avoid an extra query.
+        meter.CreateHistogram<long>("loyalty.redemption.committed", unit: "points")
+            .Record(1, new[] { new KeyValuePair<string, object>("user_tier", "unknown") });
 
         logger.CommitRedemptionSignalSent(redemptionId, userId);
     }

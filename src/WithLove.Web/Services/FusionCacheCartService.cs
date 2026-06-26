@@ -8,6 +8,7 @@ public class FusionCacheCartService : ICartService
 {
     private readonly IFusionCache _cache;
     private readonly ILogger<FusionCacheCartService> _logger;
+    private readonly Instrumentation _instrumentation;
 
     private List<CartItem> _items = [];
     private List<GiftEnhancement> _enhancements = [];
@@ -22,16 +23,19 @@ public class FusionCacheCartService : ICartService
     public decimal Total => Subtotal + EnhancementsTotal;
     public List<GiftEnhancement> Enhancements => _enhancements;
 
-    public FusionCacheCartService(IFusionCache cache, ILogger<FusionCacheCartService> logger)
+    public FusionCacheCartService(IFusionCache cache, ILogger<FusionCacheCartService> logger, Instrumentation instrumentation)
     {
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
     }
 
     /// <summary>Loads the cart and merges an anonymous cart when supplied.</summary>
     public async Task InitializeAsync(string userId, string? anonymousCartId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "initialize"));
 
         if (!string.IsNullOrEmpty(_cacheKey))
             return;
@@ -83,6 +87,7 @@ public class FusionCacheCartService : ICartService
     public async Task AddItemAsync(CartItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "add"));
 
         var existing = _items.FirstOrDefault(i => i.ProductId == item.ProductId);
         if (existing is not null)
@@ -101,6 +106,7 @@ public class FusionCacheCartService : ICartService
     /// <summary>Removes all quantities of a product.</summary>
     public async Task RemoveItemAsync(int productId)
     {
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "remove"));
         _items.RemoveAll(i => i.ProductId == productId);
         OnChange?.Invoke();
         await PersistAsync();
@@ -109,6 +115,7 @@ public class FusionCacheCartService : ICartService
     /// <summary>Updates quantity, removing the item when quantity is zero.</summary>
     public async Task UpdateQuantityAsync(int productId, int quantity)
     {
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "update_quantity"));
         var item = _items.FirstOrDefault(i => i.ProductId == productId);
         if (item is not null)
         {
@@ -130,6 +137,7 @@ public class FusionCacheCartService : ICartService
     public async Task ToggleEnhancementAsync(GiftEnhancement enhancement)
     {
         ArgumentNullException.ThrowIfNull(enhancement);
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "toggle_enhancement"));
 
         var existing = _enhancements.FirstOrDefault(e => e.Id == enhancement.Id);
         if (existing is not null)
@@ -144,6 +152,7 @@ public class FusionCacheCartService : ICartService
     /// <summary>Clears items and enhancements.</summary>
     public async Task ClearAsync()
     {
+        _instrumentation.CartOperations.Add(1, new KeyValuePair<string, object?>("operation", "clear"));
         _items.Clear();
         _enhancements.Clear();
         OnChange?.Invoke();

@@ -72,6 +72,8 @@ public partial class LoyaltyAccountWorkflow
             return Task.CompletedTask;
         }
 
+        var previousTier = _state.Tier;
+
         _state = _state with
         {
             Balance = _state.Balance + input.Points,
@@ -87,6 +89,16 @@ public partial class LoyaltyAccountWorkflow
                     Workflow.UtcNow)
             ]
         };
+
+        if (_state.Tier != previousTier)
+        {
+            Workflow.MetricMeter.CreateCounter<long>("loyalty.tier.promoted")
+                .Add(1, new[]
+                {
+                    new KeyValuePair<string, object>("from_tier", previousTier.ToString()),
+                    new KeyValuePair<string, object>("to_tier", _state.Tier.ToString()),
+                });
+        }
 
         LogPointsEarned(Workflow.Logger, input.Points, input.StripeSessionId, _state.Balance);
         _stateChanged = true;
@@ -136,6 +148,9 @@ public partial class LoyaltyAccountWorkflow
             Balance = _state.Balance + pending.Points
         };
 
+        Workflow.MetricMeter.CreateCounter<long>("loyalty.redemption.cancelled")
+            .Add(1, new[] { new KeyValuePair<string, object>("user_tier", _state.Tier.ToString()) });
+
         LogRedemptionCancelled(Workflow.Logger, redemptionId, _state.Balance);
         _stateChanged = true;
         return Task.CompletedTask;
@@ -150,10 +165,18 @@ public partial class LoyaltyAccountWorkflow
         if (input.PointsRequested <= 0)
             throw new ArgumentException("Points requested must be positive.");
         if (input.PointsRequested % 100 != 0)
+        {
+            Workflow.MetricMeter.CreateCounter<long>("loyalty.redemption.validation_failed")
+                .Add(1, new[] { new KeyValuePair<string, object>("reason", "not_multiple_100") });
             throw new ArgumentException("Points must be redeemed in multiples of 100.");
+        }
         if (input.PointsRequested > _state.Balance)
+        {
+            Workflow.MetricMeter.CreateCounter<long>("loyalty.redemption.validation_failed")
+                .Add(1, new[] { new KeyValuePair<string, object>("reason", "insufficient_balance") });
             throw new InvalidOperationException(
                 $"Insufficient balance. Have {_state.Balance}, requested {input.PointsRequested}.");
+        }
     }
 
     /// <summary>
@@ -226,6 +249,9 @@ public partial class LoyaltyAccountWorkflow
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
             CancelledRedemptionIds = [.. _state.CancelledRedemptionIds, .. expiredIds]
         };
+
+        Workflow.MetricMeter.CreateCounter<long>("loyalty.redemption.expired")
+            .Add(expired.Count);
     }
 
     // ─── Structured log methods — Workflow.Logger suppresses duplicates on replay ─

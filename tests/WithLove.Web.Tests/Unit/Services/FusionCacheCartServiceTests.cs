@@ -6,18 +6,21 @@ public class FusionCacheCartServiceTests : IDisposable
 {
     private readonly IFusionCache _cache;
     private readonly ILogger<FusionCacheCartService> _logger;
+    private readonly Instrumentation _instrumentation;
     private readonly FusionCacheCartService _service;
 
     public FusionCacheCartServiceTests()
     {
         _cache = new FusionCache(new FusionCacheOptions());
         _logger = A.Fake<ILogger<FusionCacheCartService>>();
-        _service = new FusionCacheCartService(_cache, _logger);
+        _instrumentation = new Instrumentation();
+        _service = new FusionCacheCartService(_cache, _logger, _instrumentation);
     }
 
     public void Dispose()
     {
         _cache.Dispose();
+        _instrumentation.Dispose();
     }
 
     private static CartItem CreateItem(int productId = 1, decimal price = 10m, int quantity = 1) => new()
@@ -42,7 +45,7 @@ public class FusionCacheCartServiceTests : IDisposable
     [Trait(TestTraits.Feature, TestTraits.Cart)]
     public void Constructor_WithNullCache_Throws()
     {
-        var act = () => new FusionCacheCartService(null!, _logger);
+        var act = () => new FusionCacheCartService(null!, _logger, _instrumentation);
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("cache");
     }
@@ -52,7 +55,7 @@ public class FusionCacheCartServiceTests : IDisposable
     [Trait(TestTraits.Feature, TestTraits.Cart)]
     public void Constructor_WithNullLogger_Throws()
     {
-        var act = () => new FusionCacheCartService(_cache, null!);
+        var act = () => new FusionCacheCartService(_cache, null!, _instrumentation);
 
         act.Should().Throw<ArgumentNullException>().WithParameterName("logger");
     }
@@ -353,7 +356,7 @@ public class FusionCacheCartServiceTests : IDisposable
         await _service.AddItemAsync(CreateItem(1, 15m));
 
         // Create a new service instance and load from same cache
-        var service2 = new FusionCacheCartService(_cache, _logger);
+        var service2 = new FusionCacheCartService(_cache, _logger, _instrumentation);
         await service2.InitializeAsync("user1");
 
         service2.Items.Should().HaveCount(1);
@@ -369,7 +372,7 @@ public class FusionCacheCartServiceTests : IDisposable
         await _service.AddItemAsync(CreateItem(1));
         await _service.ClearAsync();
 
-        var service2 = new FusionCacheCartService(_cache, _logger);
+        var service2 = new FusionCacheCartService(_cache, _logger, _instrumentation);
         await service2.InitializeAsync("user1");
 
         service2.Items.Should().BeEmpty();
