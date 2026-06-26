@@ -1,7 +1,6 @@
 using Microsoft.Data.SqlTypes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 using Stripe;
 using Temporalio.Activities;
 using WithLove.Data;

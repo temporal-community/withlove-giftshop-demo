@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
 using WithLove.Workflows.Activities;

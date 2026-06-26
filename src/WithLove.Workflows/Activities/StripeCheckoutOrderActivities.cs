@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Stripe;
 using Stripe.Checkout;
 using Temporalio.Activities;

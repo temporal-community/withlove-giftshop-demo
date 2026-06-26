@@ -483,8 +483,8 @@
         {
             if (!string.IsNullOrEmpty(stripeSessionId))
             {
-                var msg = checkoutModel.Message ?? "";
-                var recipientName = checkoutModel.RecipientFirstName ?? "";
+                var msg = checkoutModel.Message;
+                var recipientName = checkoutModel.RecipientFirstName;
                 await StripeClient.V1.Checkout.Sessions.UpdateAsync(stripeSessionId,
                     new Stripe.Checkout.SessionUpdateOptions
                     {

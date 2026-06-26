@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace WithLove.Web.Components.Shared;
 
 internal static partial class SharedComponentLogging

@@ -2,9 +2,7 @@ using Aspire.Hosting;
 using Aspire.Hosting.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using WithLove.Data;
-using Xunit.Abstractions;
 
 namespace WithLove.ProductsAPI.Tests.Fixtures;
 

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace WithLove.Web.Components.Pages;
 
 internal static partial class PageLogging

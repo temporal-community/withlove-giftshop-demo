@@ -1,8 +1,6 @@
 namespace WithLove.ProductsAPI.Tests.Unit.Utilities;
 
 using WithLove.ProductsAPI.Utilities;
-using WithLove.ProductsAPI.Models;
-using System.Reflection;
 
 /// <summary>
 /// Unit tests for ProblemDetailsResults utility.

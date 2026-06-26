@@ -3,7 +3,6 @@ namespace WithLove.ProductsAPI.Tests.Unit.Middleware;
 using FakeItEasy;
 using WithLove.ProductsAPI.Middleware;
 using Microsoft.AspNetCore.Http;
-using System.Text.Json;
 
 /// <summary>
 /// Unit tests for ErrorHandlingMiddleware.

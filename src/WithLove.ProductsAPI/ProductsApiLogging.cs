@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace WithLove.ProductsAPI.Filters
 {
     internal static partial class ApiFilterLogging

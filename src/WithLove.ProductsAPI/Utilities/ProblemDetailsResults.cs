@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using WithLove.ProductsAPI.Models;
-using static Microsoft.AspNetCore.Http.TypedResults;
 
 namespace WithLove.ProductsAPI.Utilities;
 

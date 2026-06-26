@@ -3,7 +3,6 @@ namespace WithLove.ProductsAPI.Tests.Unit.Filters;
 using FakeItEasy;
 using WithLove.ProductsAPI.Filters;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 
 /// <summary>
 /// Unit tests for ApiVersionValidationFilter.

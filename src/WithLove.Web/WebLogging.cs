@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace WithLove.Web;
 
 internal static partial class WebLogging
