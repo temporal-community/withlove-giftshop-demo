@@ -3,6 +3,8 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Identity
 @using WithLove.Data.Models
+@using WithLove.Workflows.Activities
+@using ZiggyCreatures.Caching.Fusion
 @inject ICartService CartService
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
@@ -12,6 +14,7 @@
 @inject AnonymousCartSession AnonSession
 @inject UserManager<ShopUser> UserManager
 @inject ILoyaltyService LoyaltyService
+@inject IFusionCache FusionCache
 @implements IAsyncDisposable
 
 <PageTitle>Checkout | With Love</PageTitle>
@@ -437,6 +440,22 @@
     {
         var session = await StripeClient.V1.Checkout.Sessions.CreateAsync(sessionOptions);
         stripeSessionId = session.Id;
+
+        // Cache the confirmationNumber → sessionId mapping so the order detail page
+        // can resolve it without scanning all sessions. Written before payment completes
+        // (session is pending); GetOrderAsync validates PaymentStatus == "paid" before returning data.
+        // _currentUserId is set during OnInitializedAsync via AuthStateProvider.
+        // Blazor components have no implicit User property — use the existing field.
+        // Checkout.razor is [Authorize] so _currentUserId is never null, but check defensively.
+        var confirmationNumber = OrderInfo.GenerateConfirmationNumber(session.Id);
+        if (_currentUserId is not null)
+        {
+            await FusionCache.SetAsync(
+                $"order:confirm:{_currentUserId}:{confirmationNumber}",
+                session.Id,
+                new FusionCacheEntryOptions { Duration = TimeSpan.FromDays(365) });
+        }
+
         var publicKey = Configuration["Stripe:Default:PublicKey"];
 
         await JS.InvokeVoidAsync("StripeCheckout.init", publicKey, session.ClientSecret);

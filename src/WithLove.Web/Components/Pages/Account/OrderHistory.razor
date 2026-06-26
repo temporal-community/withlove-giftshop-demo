@@ -1,5 +1,8 @@
 @page "/account/orders"
 @attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using WithLove.Web.Models
 
 <PageTitle>Order History | With Love</PageTitle>
 
@@ -14,44 +17,96 @@
                 <p class="text-sm text-stone-400 font-light">View and manage your recent purchases and gift selections.</p>
             </div>
 
-            <!-- Order Cards -->
-            <div class="space-y-6">
-                @foreach (var order in _orders)
+            @if (_loading)
+            {
+                <div class="flex items-center justify-center gap-3 py-20 text-stone-400">
+                    <span class="material-symbols-outlined text-2xl animate-spin">progress_activity</span>
+                    <span class="text-sm font-light">Loading your orders...</span>
+                </div>
+            }
+            else if (_loadError)
+            {
+                <div class="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
+                    <p class="text-sm text-red-600">Something went wrong loading your orders. Please try again.</p>
+                </div>
+            }
+            else if (!_orders.Any() && !_hasMore)
+            {
+                <div class="bg-stone-50 border border-stone-100 rounded-3xl p-12 text-center space-y-4">
+                    <span class="material-symbols-outlined text-4xl text-stone-300">history</span>
+                    <p class="text-stone-500 font-light">You haven't placed any orders yet.</p>
+                    <a href="/collections" class="inline-block text-xs uppercase tracking-widest text-stone-500 hover:text-primary border-b border-stone-200 hover:border-primary transition-all pb-1">Browse our collections</a>
+                </div>
+            }
+            else
+            {
+                @if (_reorderWarning is not null)
                 {
-                    <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-8 hover:shadow-xl hover:shadow-stone-100 transition-all duration-500 group">
-                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            <div class="space-y-2">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-xs uppercase tracking-widest font-semibold text-stone-400">Order #@order.OrderNumber</span>
-                                    <span class="px-3 py-1 @order.StatusStyle text-[10px] uppercase tracking-widest font-bold rounded-full">@order.Status</span>
-                                </div>
-                                <h3 class="font-display text-xl text-stone-800">Placed on @order.DatePlaced</h3>
-                                <p class="text-sm text-stone-500 font-light">Total: <span class="font-semibold text-stone-800">@order.Total.ToString("C")</span></p>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <div class="flex -space-x-4 overflow-hidden">
-                                    @foreach (var thumb in order.Thumbnails)
-                                    {
-                                        <div class="inline-block h-16 w-16 rounded-2xl ring-4 ring-white bg-stone-100 overflow-hidden relative">
-                                            <img alt="@thumb.AltText" class="h-full w-full object-cover" src="@thumb.ImageUrl" />
-                                        </div>
-                                    }
-                                    @if (order.ExtraItemCount > 0)
-                                    {
-                                        <div class="inline-block h-16 w-16 rounded-2xl ring-4 ring-white bg-stone-200 flex items-center justify-center">
-                                            <span class="text-xs font-medium text-stone-600">+@order.ExtraItemCount</span>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <button class="px-6 py-2.5 rounded-full border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-colors">Details</button>
-                                <button class="px-6 py-2.5 rounded-full @order.PrimaryActionStyle text-xs font-bold uppercase tracking-widest transition-all duration-300">@order.PrimaryAction</button>
+                    <div class="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start justify-between gap-4">
+                        <div class="flex items-start gap-3 text-sm text-amber-800">
+                            <span class="material-symbols-outlined text-base mt-0.5 shrink-0">warning</span>
+                            <div>
+                                <p>@_reorderWarning</p>
+                                <a href="/cart" class="font-semibold underline hover:text-amber-900 mt-1 inline-block">Go to Cart &rarr;</a>
                             </div>
                         </div>
+                        <button @onclick="() => _reorderWarning = null"
+                                class="shrink-0 text-amber-500 hover:text-amber-700 transition-colors"
+                                aria-label="Dismiss">
+                            <span class="material-symbols-outlined text-xl">close</span>
+                        </button>
                     </div>
                 }
-            </div>
+
+                @if (_reorderError)
+                {
+                    <div class="mb-6 bg-red-50 border border-red-100 rounded-2xl p-4 text-sm text-red-600">
+                        Something went wrong starting your reorder. Please try again.
+                    </div>
+                }
+
+                <!-- Order Cards -->
+                <div class="space-y-6">
+                    @foreach (var order in _orders)
+                    {
+                        <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-8 hover:shadow-xl hover:shadow-stone-100 transition-all duration-500 group">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                <div class="space-y-2">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-xs uppercase tracking-widest font-semibold text-stone-400">@order.ConfirmationNumber</span>
+                                        <span class="px-3 py-1 bg-sage-green/10 text-sage-green text-[10px] uppercase tracking-widest font-bold rounded-full">@order.Status</span>
+                                    </div>
+                                    <h3 class="font-display text-xl text-stone-800">Placed on @order.PlacedAt.ToString("MMMM d, yyyy")</h3>
+                                    <p class="text-sm text-stone-500 font-light">Total: <span class="font-semibold text-stone-800">@order.AmountTotal.ToString("C")</span></p>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <a href="/account/orders/@order.ConfirmationNumber"
+                                       class="px-6 py-2.5 rounded-full border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-colors">Details</a>
+                                    <button @onclick="() => ReorderAsync(order)"
+                                            class="px-6 py-2.5 rounded-full border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white text-xs font-bold uppercase tracking-widest transition-all duration-300">Reorder</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Load More -->
+                @if (_hasMore)
+                {
+                    <div class="mt-8 text-center">
+                        <button @onclick="LoadMoreAsync" disabled="@_loadingMore"
+                                class="px-8 py-3 rounded-full border border-stone-300 text-sm font-semibold
+                                       uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-colors
+                                       disabled:opacity-50 disabled:cursor-not-allowed">
+                            @(_loadingMore ? "Loading..." : "Load More")
+                        </button>
+                        @if (_loadMoreError)
+                        {
+                            <p class="mt-3 text-sm text-red-500">Something went wrong. Please try again.</p>
+                        }
+                    </div>
+                }
+            }
 
             <!-- Bottom CTA -->
             <div class="mt-20 text-center space-y-4">
@@ -63,29 +118,105 @@
 </div>
 
 @code {
-    private readonly List<OrderHistoryItem> _orders =
-    [
-        new("WL-8492", "Delivered", "bg-sage-green/10 text-sage-green",
-            "June 12, 2024", 309.00m,
-            [
-                new("https://lh3.googleusercontent.com/aida-public/AB6AXuBEB2L2RU7IQvQxpGwKCwE372ksSH0gEuSestVACG4TcNIMQNIfnzwapakiX5r_a_HhX4KSBqpFEzof_5Nsc6AkoWHQluJvmGS0iJifhuqOG6bZvR7v8j7giZCmICJ6RVtcIA86Vdg110gX99dnuzZdE8bXu2LbhAsFD93KuchfwYjWaY2BZKwgUN5rKvDCAly9EzDBKHIXp-r1NwMaKhtsKL_s5hn2tSdDz_ODRPeSzbGYQjnZiGGVmHyNROvYP1GY9O5vutjtJdw", "Velvet Crimson Roses"),
-                new("https://lh3.googleusercontent.com/aida-public/AB6AXuDWe8gFDpufP9975uuOWIUWA71Sm6HJ9jpna4sYrO8WrCd9hRMgbOhS_FBWX5RHw4NovK6Y65KezDfGO6J5WPERqpGyzFd0cM3pCQB08NHUZKm7p7dA4wmzPL3GrYueJwhjBMW56tUc7cxwAtDcV4a-UD5JjhKt7qWsAhXBELhZ5bA9M8XKqa4mVATrdtQn2O6SFkljvWtre0d6vtgs17qGFUkF_FsvS5eniGzYffFOXAFZLcSHw2d36Q0nMelfQFDkTH5S4qU4Tos", "Starlight Pendant")
-            ],
-            1, "Track", "bg-stone-800 text-white hover:bg-primary shadow-sm"),
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    [Inject] private IOrderService OrderService { get; set; } = default!;
+    [Inject] private ICartService CartService { get; set; } = default!;
+    [Inject] private IProductService ProductService { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
 
-        new("WL-7210", "Delivered", "bg-stone-100 text-stone-500",
-            "April 28, 2024", 145.00m,
-            [
-                new("https://lh3.googleusercontent.com/aida-public/AB6AXuA2Jvkxj-W1d-XP7jitQiaUO1LQyuI379et-WkWDDWVcxE6h4rjmqrYOpzqy75IwWGUqxmuutuB7r31NXGgYcWlMtZDAo4PBs_ray1I47Er54-4LT9O4zgZ_GyJB5D4NyV59s0nAtU3CmQyp2WVbM_nJSdIMTdyBbO2TzjjXo8bwGHt3vEVvwS_P_7cR43gvCDW1Y7Qi-CHxGSnFnRklBuQATNFy0SXoyiJc5RvxxT29GH44EzsCdcjqGz366NmAeW1OL2up43JNOY", "Gift Wrapping")
-            ],
-            0, "Reorder", "border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white"),
+    private List<OrderSummaryView> _orders = [];
+    private string? _nextCursor;
+    private bool _hasMore;
+    private bool _loading = true;
+    private bool _loadError;
+    private bool _loadingMore;
+    private bool _loadMoreError;
+    private string? _reorderWarning;
+    private bool _reorderError;
+    private string? _userId;
 
-        new("WL-6501", "Delivered", "bg-stone-100 text-stone-500",
-            "March 15, 2024", 89.00m,
-            [
-                new("https://lh3.googleusercontent.com/aida-public/AB6AXuCXOMgfLAN299HXnFTq5MqxB_JFn9gIPvH2gwpSxwJ1jFNAnV7L4a10lo-nKWnD77PQUZ2JjaMh05XAhwY2a8uGuG9ntK79BgnoaQ7hQzdApuMtvig_v0H-4_7bNQ2eIRmW1qk1B5iJycrwhQlDg1A-p6ivT99YOhCNHkTwWS-VakfewSowim9jinZdq9JVt_V-EBoefcoBGuJBCg5Y5uXdSP4socWkyXbGmwTGjZPvwxgpAR2pGDUsdntMt0HHpPcxNzozVtyz5dI", "Greeting Card"),
-                new("https://lh3.googleusercontent.com/aida-public/AB6AXuBEB2L2RU7IQvQxpGwKCwE372ksSH0gEuSestVACG4TcNIMQNIfnzwapakiX5r_a_HhX4KSBqpFEzof_5Nsc6AkoWHQluJvmGS0iJifhuqOG6bZvR7v8j7giZCmICJ6RVtcIA86Vdg110gX99dnuzZdE8bXu2LbhAsFD93KuchfwYjWaY2BZKwgUN5rKvDCAly9EzDBKHIXp-r1NwMaKhtsKL_s5hn2tSdDz_ODRPeSzbGYQjnZiGGVmHyNROvYP1GY9O5vutjtJdw", "Velvet Crimson Roses")
-            ],
-            0, "Reorder", "border border-stone-800 text-stone-800 hover:bg-stone-800 hover:text-white")
-    ];
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationState!;
+        _userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+        try
+        {
+            var page = await OrderService.GetOrdersAsync(_userId);
+            _orders = [..page.Orders];
+            _hasMore = page.HasMore;
+            _nextCursor = page.NextCursor;
+        }
+        catch { _loadError = true; }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (_loadingMore || !_hasMore) return;
+        _loadingMore = true;
+        _loadMoreError = false;
+        try
+        {
+            var page = await OrderService.GetOrdersAsync(_userId!, _nextCursor);
+            _orders.AddRange(page.Orders);
+            _hasMore = page.HasMore;
+            _nextCursor = page.NextCursor;
+        }
+        catch { _loadMoreError = true; }
+        finally { _loadingMore = false; }  // always clears so button re-enables on any outcome
+    }
+
+    private async Task ReorderAsync(OrderSummaryView order)
+    {
+        _reorderError = false;
+        _reorderWarning = null;
+        try
+        {
+            var auth = await AuthenticationState!;
+            var userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            // FusionCacheCartService requires InitializeAsync before any mutation —
+            // _cacheKey stays empty until initialized, causing AddItemAsync to persist to an invalid key.
+            await CartService.InitializeAsync(userId);
+
+            var detail = await OrderService.GetOrderAsync(userId, order.ConfirmationNumber);
+            if (detail is null) return;
+
+            // IProductService is cached — fast in-memory hit.
+            // Product.Id — not ProductId — matches WithLove.Web.Models.Product property name.
+            var allProducts = await ProductService.GetProductsAsync();
+            var catalogById = allProducts.ToDictionary(p => p.Id);
+
+            var unavailable = new List<string>();
+            foreach (var item in detail.LineItems.Where(li => !li.IsEnhancement && li.ProductId.HasValue))
+            {
+                // Discontinued products: no catalog entry OR catalog entry but StripePriceId cleared.
+                // Both cases mean the item cannot be charged — surface in warning banner.
+                if (!catalogById.TryGetValue(item.ProductId!.Value, out var product) ||
+                    string.IsNullOrWhiteSpace(product.StripePriceId))
+                {
+                    unavailable.Add(item.ProductName);
+                    continue;
+                }
+                await CartService.AddItemAsync(new CartItem
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name,
+                    ImageUrl = product.ImageUrl ?? "",
+                    Price = product.Price,
+                    StripePriceId = product.StripePriceId,
+                    Quantity = item.Quantity
+                });
+            }
+
+            if (unavailable.Count > 0)
+            {
+                _reorderWarning = $"{unavailable.Count} item(s) from your original order " +
+                    $"are no longer available and were not added: {string.Join(", ", unavailable)}.";
+                return;
+            }
+            Nav.NavigateTo("/cart");
+        }
+        catch { _reorderError = true; }
+    }
 }
