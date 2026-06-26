@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.4.2">
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -15,8 +15,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Aspire.Hosting.Redis" Version="13.4.2" />
-      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.4.2" />
+      <PackageReference Include="Aspire.Hosting.Redis" Version="13.4.6" />
+      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.4.6" />
       <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.4.0" />
       <PackageReference Include="Stripe.Hosting.Aspire" Version="0.3.8" />
       <PackageReference Include="Temporalio" Version="1.15.0" />
