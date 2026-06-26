@@ -5,3 +5,8 @@ global using FluentAssertions;
 global using Xunit;
 global using WithLove.Workflows.Chat;
 global using WithLove.Workflows.Tests.Traits;
+global using WithLove.Workflows.Loyalty;
+global using WithLove.Workflows.Workflows;
+global using Temporalio.Client;
+global using Temporalio.Testing;
+global using Temporalio.Worker;

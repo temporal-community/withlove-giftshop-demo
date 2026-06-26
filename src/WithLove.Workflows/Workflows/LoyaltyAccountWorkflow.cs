@@ -175,7 +175,7 @@ public partial class LoyaltyAccountWorkflow
         LogPointsReserved(Workflow.Logger, input.PointsRequested, redemptionId);
         _stateChanged = true;
 
-        return Task.FromResult(new ReservationResult(true, redemptionId, input.PointsRequested, discountAmount));
+        return Task.FromResult(new ReservationResult(redemptionId, input.PointsRequested, discountAmount));
     }
 
     // ─── Queries ──────────────────────────────────────────────────────────────

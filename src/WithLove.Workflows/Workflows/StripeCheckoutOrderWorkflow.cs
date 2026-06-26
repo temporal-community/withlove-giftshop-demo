@@ -45,6 +45,7 @@ public class StripeCheckoutOrderWorkflow
         }
     };
 
+    // Bounded retries for non-critical infrastructure calls (lookup, resolve).
     private static readonly ActivityOptions LoyaltyActivityOptions = new()
     {
         StartToCloseTimeout = TimeSpan.FromMinutes(1),
@@ -52,7 +53,22 @@ public class StripeCheckoutOrderWorkflow
         {
             InitialInterval = TimeSpan.FromSeconds(2),
             BackoffCoefficient = 2.0f,
+            MaximumInterval = TimeSpan.FromSeconds(30),
             MaximumAttempts = 3
+        }
+    };
+
+    // Earn and commit both send idempotent Signals to LoyaltyAccountWorkflow on a paid order.
+    // Both use unbounded retries — silent loss of a financial mutation is not acceptable.
+    private static readonly ActivityOptions LoyaltySignalActivityOptions = new()
+    {
+        StartToCloseTimeout = TimeSpan.FromMinutes(2),
+        RetryPolicy = new()
+        {
+            InitialInterval = TimeSpan.FromSeconds(5),
+            BackoffCoefficient = 2.0f,
+            MaximumInterval = TimeSpan.FromMinutes(10)
+            // No MaximumAttempts — defaults to unlimited
         }
     };
 
@@ -78,28 +94,32 @@ public class StripeCheckoutOrderWorkflow
             (StripeCheckoutOrderActivities act) => act.UpdateOrderStatusAsync(confirmedOrder),
             OrderActivityOptions);
 
+        // Step 4: Confirmation email — best-effort; exhausted retries must not block loyalty.
         var totalAmount = sessionInfo.AmountTotal / 100m;
-        await Workflow.ExecuteActivityAsync(
-            (StripeCheckoutOrderActivities act) =>
-                act.SendOrderConfirmationEmailAsync(orderInfo.ConfirmationNumber, sessionInfo.CustomerEmail, totalAmount),
-            EmailActivityOptions);
+        try
+        {
+            await Workflow.ExecuteActivityAsync(
+                (StripeCheckoutOrderActivities act) =>
+                    act.SendOrderConfirmationEmailAsync(orderInfo.ConfirmationNumber, sessionInfo.CustomerEmail, totalAmount),
+                EmailActivityOptions);
+        }
+        catch (ActivityFailureException)
+        {
+            Workflow.Logger.EmailConfirmationFailed(orderInfo.ConfirmationNumber);
+        }
 
-        if (!string.IsNullOrEmpty(input.StripeCustomerId))
+        // Step 5: Credit earned points.
+        // Primary: UserId from session metadata — always set for authenticated checkouts (Checkout.razor is [Authorize]).
+        // Fallback: resolve via StripeCustomerId if UserId is absent — defensive only; handles
+        // replayed webhooks, manual event injection, or events predating the metadata field.
+        var earnUserId = input.UserId;
+        if (string.IsNullOrEmpty(earnUserId) && !string.IsNullOrEmpty(input.StripeCustomerId))
         {
             try
             {
-                var userId = await Workflow.ExecuteActivityAsync(
+                earnUserId = await Workflow.ExecuteActivityAsync(
                     (LoyaltyActivities act) => act.ResolveUserIdByStripeCustomerIdAsync(input.StripeCustomerId),
                     LoyaltyActivityOptions);
-
-                if (userId is not null)
-                {
-                    var points = (int)(sessionInfo.AmountTotal / 100); // $1 = 1 point
-                    await Workflow.ExecuteActivityAsync(
-                        (LoyaltyActivities act) => act.EnsureAndEarnPointsAsync(
-                            new EnsureLoyaltyInput(userId, sessionInfo.SessionId, orderInfo.ConfirmationNumber, points)),
-                        LoyaltyActivityOptions);
-                }
             }
             catch (ActivityFailureException)
             {
@@ -107,19 +127,24 @@ public class StripeCheckoutOrderWorkflow
             }
         }
 
-        // Commit by metadata userId; do not fail a paid order if loyalty is down.
+        if (!string.IsNullOrEmpty(earnUserId))
+        {
+            // Unbounded retries — earn is an idempotent Signal on a paid order.
+            // Same durability guarantee as commit: silent loss is not acceptable.
+            var points = (int)(sessionInfo.AmountTotal / 100); // $1 = 1 point (net, after coupons)
+            await Workflow.ExecuteActivityAsync(
+                (LoyaltyActivities act) => act.EnsureAndEarnPointsAsync(
+                    new EnsureLoyaltyInput(earnUserId, sessionInfo.SessionId, orderInfo.ConfirmationNumber, points)),
+                LoyaltySignalActivityOptions);
+        }
+
+        // Step 6: Commit pending redemption — unbounded retries, no catch.
+        // CommitRedemptionAsync is idempotent. 24h reservation expiry is the last-resort safety net.
         if (!string.IsNullOrEmpty(input.UserId) && !string.IsNullOrEmpty(input.RedemptionId))
         {
-            try
-            {
-                await Workflow.ExecuteActivityAsync(
-                    (LoyaltyActivities act) => act.CommitRedemptionAsync(input.UserId, input.RedemptionId),
-                    LoyaltyActivityOptions);
-            }
-            catch (ActivityFailureException)
-            {
-                Workflow.Logger.LoyaltyCommitFailed(input.RedemptionId);
-            }
+            await Workflow.ExecuteActivityAsync(
+                (LoyaltyActivities act) => act.CommitRedemptionAsync(input.UserId, input.RedemptionId),
+                LoyaltySignalActivityOptions);
         }
 
         Workflow.Logger.OrderWorkflowCompleted(orderInfo.ConfirmationNumber);

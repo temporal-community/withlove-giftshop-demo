@@ -8,4 +8,5 @@ public static class TestTraits
     public const string Feature = "Feature";
     public const string Cart = "Cart";
     public const string Chat = "Chat";
+    public const string Loyalty = "Loyalty";
 }

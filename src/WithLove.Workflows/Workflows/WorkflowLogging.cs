@@ -34,11 +34,13 @@ internal static partial class WorkflowLogging
     [LoggerMessage(Level = LogLevel.Information, Message = "Order provisioned: {ConfirmationNumber}, tracking: {Tracking}")]
     internal static partial void OrderProvisioned(this ILogger logger, string confirmationNumber, string tracking);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Loyalty earn failed for Stripe customer {StripeCustomerId} — order complete")]
-    internal static partial void LoyaltyEarnFailed(this ILogger logger, string stripeCustomerId);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Order confirmation email failed for {ConfirmationNumber} — loyalty steps will continue")]
+    internal static partial void EmailConfirmationFailed(this ILogger logger, string confirmationNumber);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Loyalty commit failed for redemption {RedemptionId} — order complete, reservation will expire")]
-    internal static partial void LoyaltyCommitFailed(this ILogger logger, string redemptionId);
+    // Only the StripeCustomerId lookup is caught (best-effort fallback path).
+    // EnsureAndEarnPointsAsync uses unbounded retries — no log method needed for earn failure.
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Loyalty earn: failed to resolve user for Stripe customer {StripeCustomerId} — earn skipped")]
+    internal static partial void LoyaltyEarnFailed(this ILogger logger, string stripeCustomerId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Order processing workflow completed for {ConfirmationNumber}")]
     internal static partial void OrderWorkflowCompleted(this ILogger logger, string confirmationNumber);
