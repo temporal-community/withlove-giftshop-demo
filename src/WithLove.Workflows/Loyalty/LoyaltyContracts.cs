@@ -7,7 +7,7 @@ public enum LoyaltyTier { Bronze, Silver, Gold }
 /// </summary>
 public record PointTransaction(
     string StripeSessionId,  // cs_... for purchases; redemptionId for committed redemptions
-    string? DisplayRef,      // Human-readable order confirmation number (e.g. "#WL-XXXXXX") for UI
+    string? DisplayRef,      // Human-readable order confirmation number (e.g. "WL-XXXXXXX") for UI
     int Points,              // positive = earned, negative = redeemed (committed only)
     string Reason,           // "Purchase" | "Redemption"
     DateTime OccurredAt);
@@ -89,6 +89,8 @@ public record EarnPointsInput(string StripeSessionId, string ConfirmationNumber,
 /// </summary>
 public record ReservePointsInput(int PointsRequested);
 
-public record ReservationResult(bool Success, string RedemptionId, int PointsReserved, decimal DiscountAmount);
+// Success field omitted intentionally — ReservePointsAsync either returns a result or throws
+// (WorkflowUpdateFailedException from the validator). A Success = false value is never produced.
+public record ReservationResult(string RedemptionId, int PointsReserved, decimal DiscountAmount);
 
 public record EnsureLoyaltyInput(string UserId, string StripeSessionId, string ConfirmationNumber, int Points);

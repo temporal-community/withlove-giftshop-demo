@@ -112,6 +112,6 @@ public record OrderInfo(string ConfirmationNumber, string TrackingNumber, string
     public static string GenerateConfirmationNumber(string sessionId)
     {
         var suffix = sessionId.Length >= 7 ? sessionId[^7..] : sessionId;
-        return $"#WL-{suffix.ToUpperInvariant()}";
+        return $"WL-{suffix.ToUpperInvariant()}";
     }
 }

@@ -128,6 +128,12 @@ builder.Services.AddScoped<AnonymousCartSession>();
 
 builder.Services.AddScoped<ICartService, FusionCacheCartService>();
 
+// Fully qualified to avoid adding Stripe using directives to Program.cs.
+// SessionService is scoped so it takes a fresh StripeClient per request scope.
+builder.Services.AddScoped(sp =>
+    new Stripe.Checkout.SessionService(sp.GetRequiredService<Stripe.StripeClient>()));
+builder.Services.AddScoped<IOrderService, StripeOrderService>();
+
 builder.Services.AddScoped<ChatService>();
 
 builder.Services.AddScoped<ILoyaltyService, TemporalLoyaltyService>();
