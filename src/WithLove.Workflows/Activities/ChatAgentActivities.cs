@@ -36,6 +36,7 @@ public partial class ChatAgentActivities(IChatClient chatClient, IHttpClientFact
         - Refer to product collections (not categories) in conversation
         - Prices are in USD
         - When showing product images, use markdown image syntax: ![Product Name](imageUrl)
+        - Product IDs are internal references for tool calls only — never mention them in responses to the customer
 
         CRITICAL rules for cart operations:
         - ALWAYS use the EXACT product ID from tool results. Never guess or assume IDs.
