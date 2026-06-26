@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Extensions.Logging;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
 using Temporalio.Exceptions;
@@ -27,7 +26,8 @@ public class TemporalLoyaltyService(
                 (LoyaltyAccountWorkflow wf) => wf.RunAsync(null),
                 new WorkflowOptions(WorkflowId(userId), WorkflowConstants.DefaultTaskQueue)
                 {
-                    IdConflictPolicy = WorkflowIdConflictPolicy.UseExisting
+                    IdConflictPolicy = WorkflowIdConflictPolicy.UseExisting,
+                    Rpc = new RpcOptions { CancellationToken = ct },
                 });
         }
         catch (Exception ex)

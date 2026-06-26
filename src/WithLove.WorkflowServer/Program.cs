@@ -8,7 +8,6 @@ using Temporalio.Extensions.OpenTelemetry;
 using Temporalio.Runtime;
 using WithLove.Data;
 using WithLove.Workflows.Activities;
-using WithLove.Workflows.Loyalty;
 using WithLove.Workflows.Workflows;
 using WithLove.WorkflowServer.Services;
 
@@ -91,9 +90,11 @@ builder.Services.AddHostedTemporalWorker(
         taskQueue: "with-love-tasks")
     .ConfigureOptions(opts =>
     {
-        opts.ClientOptions ??= new();
-        opts.ClientOptions.Runtime = temporalRuntime;
-        opts.ClientOptions.Interceptors = [new TracingInterceptor()];
+        opts.ClientOptions = new()
+        {
+            Runtime = temporalRuntime,
+            Interceptors = [new TracingInterceptor()]
+        };
         opts.Interceptors = [new TracingInterceptor()];
     })
     .AddScopedActivities<DatabaseActivities>()

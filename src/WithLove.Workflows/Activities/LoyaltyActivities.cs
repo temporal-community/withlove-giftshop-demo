@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Temporalio.Activities;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
@@ -87,9 +86,7 @@ public class LoyaltyActivities(ProductsDbContext dbContext)
         var handle = client.GetWorkflowHandle<LoyaltyAccountWorkflow>($"loyalty-{userId}");
         await handle.SignalAsync(wf => wf.CommitRedemptionAsync(redemptionId));
 
-        // Tier is not available in this activity's input — use "unknown" to avoid an extra query.
-        meter.CreateHistogram<long>("loyalty.redemption.committed", unit: "points")
-            .Record(1, new[] { new KeyValuePair<string, object>("user_tier", "unknown") });
+        meter.CreateHistogram<long>("loyalty.redemption.committed", unit: "points").Record(1);
 
         logger.CommitRedemptionSignalSent(redemptionId, userId);
     }
