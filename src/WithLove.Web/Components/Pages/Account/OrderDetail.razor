@@ -53,6 +53,23 @@
                     <p class="text-sm text-stone-400 font-light">Placed on @_order.PlacedAt.ToString("MMMM d, yyyy")</p>
                 </div>
 
+                <!-- Reorder warning banner -->
+                @if (_reorderWarning is not null)
+                {
+                    <div class="mb-6 bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-start gap-3">
+                        <span class="material-symbols-outlined text-amber-400 shrink-0 mt-0.5">warning</span>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm text-amber-800">@_reorderWarning</p>
+                            <a href="/cart" class="mt-2 inline-block text-xs font-semibold uppercase tracking-widest text-primary hover:text-primary-dark transition-colors">Go to Cart →</a>
+                        </div>
+                        <button @onclick="() => _reorderWarning = null"
+                                class="shrink-0 text-amber-500 hover:text-amber-700 transition-colors"
+                                aria-label="Dismiss">
+                            <span class="material-symbols-outlined text-xl">close</span>
+                        </button>
+                    </div>
+                }
+
                 <!-- Line Items -->
                 <div class="bg-white border border-stone-100 rounded-3xl p-6 md:p-8 hover:shadow-xl hover:shadow-stone-100/50 transition-all duration-500">
                     <h2 class="font-display text-xl text-stone-800 mb-6 pb-4 border-b border-stone-50">Items Ordered</h2>
@@ -89,11 +106,23 @@
                         }
                     </div>
 
-                    <!-- Order Total -->
+                    <!-- Order Total + Reorder -->
                     <hr class="my-6 border-stone-100" />
-                    <div class="flex items-center justify-between">
-                        <p class="text-sm font-bold uppercase tracking-widest text-stone-500">Order Total</p>
-                        <p class="text-xl font-display font-semibold text-stone-800">@_order.AmountTotal.ToString("C")</p>
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-bold uppercase tracking-widest text-stone-500">Order Total</p>
+                            <p class="text-xl font-display font-semibold text-stone-800 mt-1">@_order.AmountTotal.ToString("C")</p>
+                        </div>
+                        <div class="flex flex-col items-end gap-2">
+                            <button @onclick="ReorderAsync" disabled="@_reordering"
+                                    class="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-semibold uppercase tracking-widest rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                @(_reordering ? "Adding to Cart..." : "Reorder")
+                            </button>
+                            @if (_reorderError)
+                            {
+                                <p class="text-xs text-red-500">Something went wrong. Please try again.</p>
+                            }
+                        </div>
                     </div>
                 </div>
             }
@@ -105,16 +134,22 @@
     /// <summary>The "WL-XXXXXXX" confirmation number from the URL route.</summary>
     [Parameter] public string ConfirmationNumber { get; set; } = "";
 
-    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
     [Inject] private IOrderService OrderService { get; set; } = default!;
+    [Inject] private ICartService CartService { get; set; } = default!;
+    [Inject] private IProductService ProductService { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
 
     private OrderDetailView? _order;
     private bool _loading = true;
     private bool _loadError;
+    private bool _reordering;
+    private string? _reorderWarning;
+    private bool _reorderError;
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthenticationState!;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         var userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
         try
         {
@@ -124,5 +159,55 @@
         }
         catch { _loadError = true; }
         finally { _loading = false; }
+    }
+
+    private async Task ReorderAsync()
+    {
+        if (_reordering || _order is null) return;
+        _reordering = true;
+        _reorderError = false;
+        _reorderWarning = null;
+        try
+        {
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
+            // FusionCacheCartService requires InitializeAsync before any mutation.
+            await CartService.InitializeAsync(userId);
+
+            // _order already has full line items — no second GetOrderAsync call needed.
+            var allProducts = await ProductService.GetProductsAsync();
+            var catalogById = allProducts.ToDictionary(p => p.Id);
+
+            var unavailable = new List<string>();
+            foreach (var item in _order.LineItems.Where(li => !li.IsEnhancement && li.ProductId.HasValue))
+            {
+                if (!catalogById.TryGetValue(item.ProductId!.Value, out var product) ||
+                    string.IsNullOrWhiteSpace(product.StripePriceId))
+                {
+                    unavailable.Add(item.ProductName);
+                    continue;
+                }
+                await CartService.AddItemAsync(new CartItem
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name,
+                    ImageUrl = product.ImageUrl ?? "",
+                    Price = product.Price,
+                    StripePriceId = product.StripePriceId,
+                    Quantity = item.Quantity
+                });
+            }
+
+            if (unavailable.Count > 0)
+            {
+                _reorderWarning = $"{unavailable.Count} item(s) from your original order " +
+                    $"are no longer available and were not added: {string.Join(", ", unavailable)}.";
+                return;
+            }
+            Nav.NavigateTo("/cart");
+        }
+        catch { _reorderError = true; }
+        finally { _reordering = false; }
     }
 }

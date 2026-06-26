@@ -118,7 +118,7 @@
 </div>
 
 @code {
-    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
     [Inject] private IOrderService OrderService { get; set; } = default!;
     [Inject] private ICartService CartService { get; set; } = default!;
     [Inject] private IProductService ProductService { get; set; } = default!;
@@ -137,7 +137,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthenticationState!;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         _userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
         try
         {
@@ -172,7 +172,7 @@
         _reorderWarning = null;
         try
         {
-            var auth = await AuthenticationState!;
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
             var userId = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
             // FusionCacheCartService requires InitializeAsync before any mutation —
