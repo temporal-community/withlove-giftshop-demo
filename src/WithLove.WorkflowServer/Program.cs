@@ -90,11 +90,9 @@ builder.Services.AddHostedTemporalWorker(
         taskQueue: "with-love-tasks")
     .ConfigureOptions(opts =>
     {
-        opts.ClientOptions = new()
-        {
-            Runtime = temporalRuntime,
-            Interceptors = [new TracingInterceptor()]
-        };
+        opts.ClientOptions ??= new();
+        opts.ClientOptions.Runtime = temporalRuntime;
+        opts.ClientOptions.Interceptors = [new TracingInterceptor()];
         opts.Interceptors = [new TracingInterceptor()];
     })
     .AddScopedActivities<DatabaseActivities>()
