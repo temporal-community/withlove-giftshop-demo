@@ -100,6 +100,9 @@ public static class TemporalContainerBuilderExtensions
         if (!string.IsNullOrEmpty(options.ApiKey))
             args.AddRange(["--api-key", options.ApiKey]);
 
+        if (options is TemporalContainerOptions containerOptions && !string.IsNullOrEmpty(containerOptions.DbFilename))
+            args.AddRange(["--db-filename", containerOptions.DbFilename]);
+
         return args.ToArray();
     }
     
@@ -126,6 +129,7 @@ public static class TemporalContainerBuilderExtensions
 public class TemporalContainerOptions: TemporalResourceOptions
 {
     public string? ImageTag { get; set; } = TemporalResourceConstants.DefaultTag;
+    public string? DbFilename { get; set; }
 }
 
 

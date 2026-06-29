@@ -46,7 +46,8 @@ public class TemporalLoyaltyService(
         }
         catch (RpcException ex) when (ex.Code == RpcException.StatusCode.NotFound)
         {
-            return null;
+            await EnsureWorkflowAsync(userId, ct);
+            return new LoyaltyProfile(Balance: 0, LifetimeEarned: 0, Tier: LoyaltyTier.Bronze, PointsToNextTier: 500);
         }
     }
 
@@ -69,6 +70,7 @@ public class TemporalLoyaltyService(
         }
         catch (RpcException ex) when (ex.Code == RpcException.StatusCode.NotFound)
         {
+            await EnsureWorkflowAsync(userId, ct);
             return [];
         }
     }

@@ -62,7 +62,13 @@ if (!isTestMode)
             SearchAttributeKey.CreateKeyword("StripeSessionId"),
             SearchAttributeKey.CreateKeyword("CustomerId"),
         ];
+        opts.DbFilename = "/home/temporal/temporal.db";
     });
+
+    // Mount at /home/temporal — that directory is owned by the temporal user (uid=1000)
+    // in the image. Docker's copy-up initializes a fresh named volume with the same
+    // ownership, so the temporal process can write the SQLite file.
+    temporalServer.WithVolume("temporal-data", "/home/temporal");
 
     // Workflow Server — needs OpenAI for chat inference, Stripe for order processing
     builder.AddProject<Projects.WithLove_WorkflowServer>("workflowServer")
