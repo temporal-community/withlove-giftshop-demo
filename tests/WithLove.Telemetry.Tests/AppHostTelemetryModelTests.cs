@@ -128,7 +128,7 @@ public class AppHostTelemetryModelTests
     }
 
     [Fact]
-    public async Task PublishAppHost_DefaultsEveryServiceToAxWithoutPhoenix()
+    public async Task PublishAppHost_DefaultsEveryServiceToAxWithoutPhoenixOrIdentityKeyParameter()
     {
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
             args: ["--publisher", "manifest"]);
@@ -137,12 +137,16 @@ public class AppHostTelemetryModelTests
 
         model.Resources.OfType<ArizeAxResource>().Should().ContainSingle(resource => resource.Name == "arize-ax");
         model.Resources.Should().NotContain(resource => resource is PhoenixResource);
+        model.Resources.OfType<ParameterResource>().Should().NotContain(resource =>
+            resource.Name == "telemetry-identity-key");
         foreach (var serviceName in new[] { "productsApi", "workflowServer", "shopSite" })
         {
             var service = model.Resources.OfType<ProjectResource>().Single(resource => resource.Name == serviceName);
             var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
             AssertParameterExpression(environment, "Arize__Tracing__Ax__Endpoint", "arize-ax-otlp-endpoint");
             environment.Should().NotContainKey("Phoenix__OtlpTracesEndpoint");
+            environment.Should().NotContainKey("TelemetryIdentity__Key");
+            environment.Should().NotContainKey("TelemetryIdentity__KeyVersion");
             AssertCaptureEnvironment(
                 environment,
                 expectedCapture: false);

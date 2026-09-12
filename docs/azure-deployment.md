@@ -82,7 +82,6 @@ Collect the following values before running Step 3:
 | `ARIZE_OTLP_ENDPOINT` | The regional OTLP endpoint shown by the Arize AX connect page; no region is assumed by the application |
 | `ARIZE_API_KEY` | Arize AX → Settings → API Keys; use a scoped service key |
 | `ARIZE_SPACE_ID` | The base64 space ID used for OTLP ingestion, not the human-readable space name |
-| `telemetry-identity-key` | Deployment-only secret: generate once with `openssl rand -base64 32`; never use the committed local demo key; keep it stable to preserve trace grouping |
 | `redis-password` | Generate once with `openssl rand -hex 24`; keep it stable across deploys |
 | `stripe-api-key` | Stripe Dashboard → Developers → API keys → Secret key |
 | `stripe-public-key` | Stripe Dashboard → Developers → API keys → Publishable key |
@@ -97,6 +96,10 @@ Published applications default to Arize AX for traces. The AX resource is extern
 from the deployment manifest; its endpoint, API key, and space ID remain deferred deployment
 parameters. Logs and metrics continue to use Aspire's OTLP configuration, and AX headers are
 attached only to the AX trace exporter.
+
+The sample's committed telemetry identity key is used in Azure as well as local environments. It
+keeps raw user and session identifiers out of traces and preserves demo grouping, but it is public
+and is not a production privacy boundary.
 
 ## Step 2 — Register Temporal Cloud search attributes (one-time)
 

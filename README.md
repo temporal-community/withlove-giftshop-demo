@@ -102,11 +102,10 @@ aspire secret get Parameters:openai-api-key
 
 The AppHost injects these values into the appropriate projects.
 
-The Web app uses a committed demo-only telemetry identity key when its environment is Development,
-so no local telemetry secret setup is required. The public key prevents raw identifiers from
-appearing directly in traces but is not production-grade pseudonymization. Every non-Development
-environment requires a private, stable `telemetry-identity-key`; Azure receives it through the
-deployment parameter and Key Vault flow.
+The Web app uses one committed sample telemetry identity key in every environment, so no telemetry
+secret setup is required. It prevents raw identifiers from appearing directly in traces and keeps
+demo trace grouping stable, but it is public and is not production-grade pseudonymization. Do not
+reuse this design for an application that handles real customers or production data.
 
 ## Running Locally
 

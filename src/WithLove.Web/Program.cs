@@ -180,7 +180,7 @@ builder.Services.AddScoped<IOrderService, StripeOrderService>();
 
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddSingleton(OpenInferenceTraceConfig.Default);
-builder.Services.AddSingleton(TelemetryIdentityFactory.Create(builder.Environment, builder.Configuration));
+builder.Services.AddSingleton(TelemetryIdentityFactory.Create());
 builder.Services.AddScoped<IGiftShopChatWorkflowClient, GiftShopChatWorkflowClient>();
 builder.Services.AddScoped<ChatIdentityRotator>();
 

@@ -109,24 +109,12 @@ guarantee and require their own privacy audit.
 The Web app derives versioned, domain-separated HMAC-SHA256 pseudonyms. The helper is owned by
 `WithLove.Web`; it remains outside the reusable `WithLove.OpenInference` conventions project.
 
-When the Web environment is Development, the application uses a committed demo-only key and the
-`demo-v1` key version. This removes setup friction and prevents raw identifiers from appearing
-directly in traces, but it is not production-grade pseudonymization: the key is public, so someone
-with candidate identifiers can reproduce their HMAC values.
+The sample uses one committed key and the `demo-v1` key version in every environment. This removes
+deployment setup friction, prevents raw identifiers from appearing directly in traces, and keeps
+demo trace grouping stable. It is not production-grade pseudonymization: the key is public, so
+someone with candidate identifiers can reproduce their HMAC values. Do not reuse this design for
+an application that handles real customers or production data.
 
-Published deployments require private configuration:
-
-```text
-TelemetryIdentity:Key        Base64 for at least 32 random bytes
-TelemetryIdentity:KeyVersion v1
-```
-
-Every non-Development startup fails if either value is missing or malformed. There is no generated
-fallback because a new key on every launch would silently destroy stable grouping. Only Web
-receives the deployment secret.
 WorkflowServer receives the safe session value as durable `ConversationId`; the raw workflow ID
 is used only as the Temporal routing key. Temporal OpenTelemetry interceptors set
 `TagNameWorkflowId=null` so they cannot emit `temporalWorkflowID`.
-
-Rotating the deployment key intentionally starts new session/user groups. Change the key and key
-version together. Never copy the committed local demo key into a deployment.

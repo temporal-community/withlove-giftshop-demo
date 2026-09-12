@@ -17,7 +17,6 @@ internal static partial class WithLoveApplicationExtensions
     private const string CaptureAiContentEnvironmentVariable = "Telemetry__CaptureAiContent";
     private const string AspireGenAiCaptureMessageContentEnvironmentVariable =
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
-    private const string DeploymentTelemetryIdentityKeyVersion = "v1";
     private const string StripeWebhookSecretParameterName = "stripe-webhook-secret";
     private const string StripeWebhookSecretPrefix = "whsec_";
 
@@ -47,10 +46,7 @@ internal static partial class WithLoveApplicationExtensions
 
         if (isPublishMode)
         {
-            // Only the Web process computes pseudonyms. Keep the private deployment key out of the
-            // Products API and WorkflowServer; the worker receives the safe conversation ID.
-            var telemetryIdentityKey = builder.AddParameter("telemetry-identity-key", secret: true);
-            ConfigureAzureDependencies(builder, application, infrastructure, parameters, telemetryIdentityKey);
+            ConfigureAzureDependencies(builder, application, infrastructure, parameters);
         }
         else
         {
@@ -392,8 +388,7 @@ internal static partial class WithLoveApplicationExtensions
         IDistributedApplicationBuilder builder,
         WithLoveApplication application,
         WithLoveInfrastructure infrastructure,
-        WithLoveParameters parameters,
-        IResourceBuilder<ParameterResource> telemetryIdentityKey)
+        WithLoveParameters parameters)
     {
         var keyVault = builder.AddAzureKeyVault("keyvault");
         var sharedIdentity = builder.AddAzureUserAssignedIdentity("withlove-identity");
@@ -409,7 +404,6 @@ internal static partial class WithLoveApplicationExtensions
         keyVault.AddSecret("kv-stripe-public-key", parameters.StripePublicKey);
         keyVault.AddSecret("kv-stripe-webhook-secret", stripeWebhookSecret);
         keyVault.AddSecret("kv-temporal-api-key", parameters.TemporalApiKey);
-        keyVault.AddSecret("kv-telemetry-identity-key", telemetryIdentityKey);
 
         var temporalCloud = builder.AddTemporalCloud(
             "temporal-cloud",
@@ -426,8 +420,6 @@ internal static partial class WithLoveApplicationExtensions
 
         var shopSite = ConfigureKeyVaultAccess(application.ShopSite, keyVault, sharedIdentity)
             .WithEnvironment("OPENAI_API_KEY", keyVault.GetSecret("kv-openai-api-key"))
-            .WithEnvironment("TelemetryIdentity__Key", keyVault.GetSecret("kv-telemetry-identity-key"))
-            .WithEnvironment("TelemetryIdentity__KeyVersion", DeploymentTelemetryIdentityKeyVersion)
             .WithEnvironment("Stripe__Default__ApiKey", keyVault.GetSecret("kv-stripe-api-key"))
             .WithEnvironment("Stripe__Default__PublicKey", keyVault.GetSecret("kv-stripe-public-key"))
             .WithEnvironment("Stripe__Default__WebhookSecret", keyVault.GetSecret("kv-stripe-webhook-secret"));
