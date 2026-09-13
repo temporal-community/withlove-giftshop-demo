@@ -6,13 +6,11 @@ Deploy with the repository's `just` recipes. They wrap the Aspire CLI with the a
 
 ## Prerequisites
 
-- .NET 10 SDK
-- Azure CLI (`az`) — authenticate with `az login`
-- Aspire CLI — install from [aspire.dev](https://aspire.dev/get-started/install-cli/)
-- `just` and `jq` for the repository deployment recipes
-- Temporal Cloud account with a namespace provisioned and an API key
-- Stripe account with API keys
-- OpenAI account with an API key (used for embeddings and chat)
+See the README: [Prerequisites](../README.md#prerequisites) for the tooling and accounts the app
+needs locally, and [Additional Prerequisites](../README.md#additional-prerequisites) for the extra
+pieces deployment requires — Azure CLI, `just`, `jq`, `tcld`, and a Temporal Cloud account.
+
+Run `az login` before Step 3.
 
 ## Architecture overview
 

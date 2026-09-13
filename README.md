@@ -189,6 +189,9 @@ The application deploys to Azure Container Apps via the Aspire CLI.
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) — authenticated with `az login`
 - [Temporal CLI](https://docs.temporal.io/cli) — for workflow management during teardown
 - [just](https://just.systems) — task runner (`brew install just` on macOS)
+- [`jq`](https://jqlang.github.io/jq/) — the deploy and destroy recipes parse Azure JSON with it
+- [`tcld`](https://docs.temporal.io/cloud/tcld) — Temporal **Cloud** CLI, used once to register search
+  attributes. This is a different binary from the Temporal CLI above.
 - A [Temporal Cloud](https://cloud.temporal.io) account — the app uses Temporal Cloud in production (not the local container)
 
 ### Setup
