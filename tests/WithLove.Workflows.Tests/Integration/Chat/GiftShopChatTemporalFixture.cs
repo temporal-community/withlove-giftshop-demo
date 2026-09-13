@@ -124,7 +124,7 @@ internal sealed class GiftShopChatWorkerHarness : IAsyncDisposable
                     new TemporalUpdateTraceContextInterceptor(),
                 ];
             })
-            .AddGiftShopChatWorker(
+            .ConfigureGiftShopChatWorker(
                 (function, metadata) => new OpenInferenceToolFunction(
                     function,
                     metadata.ToolCallId,

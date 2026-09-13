@@ -143,7 +143,7 @@ var temporalWorker = builder.Services.AddHostedTemporalWorker(
     .AddWorkflow<StripeCheckoutOrderWorkflow>()
     .AddWorkflow<LoyaltyAccountWorkflow>();
 
-temporalWorker.AddGiftShopChatWorker(
+temporalWorker.ConfigureGiftShopChatWorker(
     (function, metadata) => new OpenInferenceToolFunction(
         function,
         metadata.ToolCallId,

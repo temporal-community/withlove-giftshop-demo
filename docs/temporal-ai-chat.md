@@ -34,8 +34,8 @@ Web is declaration-only. `AddGiftShopChatWorkflowClient` registers the durable w
 factory and all 13 model-visible tool declarations. Web does not host tool implementations and does
 not put tools in `ChatOptions.Tools`.
 
-workflowServer calls `AddGiftShopChatWorker`. It registers `AddDurableAI`, the concrete GiftShop
-workflow, the same declarations, and scoped implementation factories. The provider `IChatClient`
+workflowServer creates the hosted worker, then calls `ConfigureGiftShopChatWorker` to configure durable
+AI, the concrete GiftShop workflow, the same declarations, and scoped implementation factories. The provider `IChatClient`
 is intentionally bare; it must not use MEAI `UseFunctionInvocation()` because the durable package
 owns function invocation.
 
