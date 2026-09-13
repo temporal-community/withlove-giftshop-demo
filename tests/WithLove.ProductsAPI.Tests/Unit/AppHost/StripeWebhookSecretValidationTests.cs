@@ -25,6 +25,15 @@ public class StripeWebhookSecretValidationTests
     /// <summary>A well-formed value: the 6-character prefix plus 32 characters, 38 total.</summary>
     private const string WellFormedSecret = "whsec_0123456789abcdef0123456789abcdef";
 
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Validation)]
+    public void StripeWebhookSecretValidation_IsRequiredByBothPublishAndDeployPipelines()
+    {
+        WithLoveApplicationExtensions.StripeWebhookSecretValidationRequiredBy.Should().BeEquivalentTo(
+            ["publish-prereq", "deploy-prereq"]);
+    }
+
     /// <summary>
     /// Distinctive marker used to prove the malformed value never reaches the exception message.
     /// </summary>
@@ -88,9 +97,9 @@ public class StripeWebhookSecretValidationTests
     }
 
     /// <summary>
-    /// <c>whsec_placeholder</c> is the documented Step-1 bootstrap value for an Azure ACA deploy
-    /// (docs/azure-deployment.md), because the Stripe event destination cannot be created until the
-    /// shopSite endpoint exists. Rejecting it would break the documented first deploy.
+    /// <c>whsec_placeholder</c> is the temporary bootstrap value that <c>just deploy</c> seeds
+    /// for an Azure ACA deploy, because the Stripe event destination cannot be created until the
+    /// shopSite endpoint exists. Rejecting it would break the automated first deploy.
     /// </summary>
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
@@ -104,7 +113,7 @@ public class StripeWebhookSecretValidationTests
 
         // Assert
         act.Should().NotThrow(
-            "docs/azure-deployment.md tells operators to enter whsec_placeholder for the first deploy");
+            "just deploy seeds whsec_placeholder until it can create the Stripe Event Destination");
     }
 
     /// <summary>
@@ -146,9 +155,10 @@ public class StripeWebhookSecretValidationTests
     }
 
     /// <summary>
-    /// The remediation text is load-bearing: this parameter is publish-only and <c>aspire deploy</c>
-    /// reads its own <c>.secrets.env</c> cache, not the <c>aspire secret set</c> user-secret store.
-    /// Pointing an operator at the wrong store leaves them editing a value nothing reads.
+    /// The remediation text is load-bearing: the repository recipe owns the bootstrap value, while
+    /// direct deployment reads <c>.secrets.env</c> rather than the <c>aspire secret set</c>
+    /// user-secret store. Pointing an operator at the wrong recovery action leaves the app unable
+    /// to verify Stripe signatures.
     /// </summary>
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
@@ -164,7 +174,7 @@ public class StripeWebhookSecretValidationTests
         message.Should().Contain($"Parameter '{ParameterName}'", "the operator must know which parameter failed");
         message.Should().Contain("Fix it in .secrets.env");
         message.Should().Contain("Parameters__stripe_webhook_secret=", "that is the exact line to edit");
-        message.Should().Contain("publish-only");
+        message.Should().Contain("remove a manually supplied value");
         message.Should().Contain("whsec_", "the message must state the expected shape");
     }
 }

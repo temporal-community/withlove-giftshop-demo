@@ -20,6 +20,14 @@ internal static partial class WithLoveApplicationExtensions
     private const string StripeWebhookSecretParameterName = "stripe-webhook-secret";
     private const string StripeWebhookSecretPrefix = "whsec_";
 
+#pragma warning disable ASPIREPIPELINES001
+    internal static readonly string[] StripeWebhookSecretValidationRequiredBy =
+    [
+        WellKnownPipelineSteps.PublishPrereq,
+        WellKnownPipelineSteps.DeployPrereq,
+    ];
+#pragma warning restore ASPIREPIPELINES001
+
     public static void AddWithLoveApplication(
         this IDistributedApplicationBuilder builder,
         bool isPublishMode,
@@ -140,7 +148,7 @@ internal static partial class WithLoveApplicationExtensions
                 ValidateStripeWebhookSecret(parameter.Resource.Name, value);
             },
             dependsOn: [WellKnownPipelineSteps.ProcessParameters],
-            requiredBy: [WellKnownPipelineSteps.PublishPrereq],
+            requiredBy: StripeWebhookSecretValidationRequiredBy,
             description: "Rejects a malformed Stripe webhook signing secret before it reaches Key Vault.");
 #pragma warning restore ASPIREPIPELINES001
 
@@ -184,9 +192,10 @@ internal static partial class WithLoveApplicationExtensions
             "quotes or whitespace, as printed by `stripe listen --print-secret` or shown on the Stripe " +
             $"Dashboard webhook endpoint. Observed length: {value?.Length ?? 0} characters. " +
             $"Fix it in .secrets.env: Parameters__{parameterName.Replace('-', '_')}=\"whsec_...\" — " +
-            "this parameter is publish-only, and `aspire deploy` reads its own cache from " +
-            ".secrets.env, not the `aspire secret set` user-secret store (see " +
-            "docs/azure-deployment.md Step 5). The value itself is deliberately not shown.");
+            "or remove a manually supplied value when using `just deploy`, which seeds its bootstrap " +
+            "value automatically. Deployment inputs come from .secrets.env rather than the " +
+            "`aspire secret set` user-secret store; see docs/azure-deployment.md. The value itself " +
+            "is deliberately not shown.");
     }
 
     private static bool IsQuoteWrapped(string value)

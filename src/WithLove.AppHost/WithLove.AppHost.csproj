@@ -17,6 +17,7 @@
              test project calls it directly. -->
         <InternalsVisibleTo Include="WithLove.ProductsAPI.Tests" />
         <InternalsVisibleTo Include="WithLove.Telemetry.Tests" />
+        <InternalsVisibleTo Include="WithLove.StripeWebhooks.Tests" />
     </ItemGroup>
 
     <ItemGroup>

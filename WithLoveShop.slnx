@@ -15,9 +15,11 @@
     <Project Path="tests/WithLove.ProductsAPI.Tests/WithLove.ProductsAPI.Tests.csproj" />
     <Project Path="tests/WithLove.Web.Tests/WithLove.Web.Tests.csproj" />
     <Project Path="tests/WithLove.Workflows.Tests/WithLove.Workflows.Tests.csproj" />
+    <Project Path="tests/WithLove.StripeWebhooks.Tests/WithLove.StripeWebhooks.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/WithLove.OpenInference.Generator/WithLove.OpenInference.Generator.csproj" />
     <Project Path="tools/WithLove.Telemetry.Verifier/WithLove.Telemetry.Verifier.csproj" />
+    <Project Path="tools/WithLove.StripeWebhooks/WithLove.StripeWebhooks.csproj" />
   </Folder>
 </Solution>

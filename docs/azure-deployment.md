@@ -88,9 +88,12 @@ Collect the following values before running Step 3:
 | `temporal-address` | Temporal Cloud → Namespace → gRPC endpoint (e.g. `your-ns.tmprl.cloud:7233`) |
 | `temporal-namespace` | Temporal Cloud → Namespace name (e.g. `your-ns.acct`) |
 | `temporal-api-key` | Temporal Cloud → API keys |
-| `stripe-webhook-secret` | Enter `whsec_placeholder` for now — replaced in Step 5 |
 
 > **Note:** `aspire secret set` stores values in the AppHost's local dev user secrets for `aspire run`. Those values are not read by `aspire deploy`. Use the interactive prompts (Step 3) or environment variables (see CI deploy section) to supply values to the deploy pipeline.
+
+The Stripe webhook signing secret is intentionally not an input. `just deploy` seeds its temporary
+bootstrap value, creates the Stripe Event Destination after Azure assigns the shopSite URL, and
+records the generated signing secret automatically.
 
 Published applications default to Arize AX for traces. The AX resource is external and excluded
 from the deployment manifest; its endpoint, API key, and space ID remain deferred deployment
@@ -137,11 +140,8 @@ These attributes must exist before the workflowServer starts or workflow searche
 ```bash
 az login
 
-# Optional: preview the underlying Aspire steps without deploying
-aspire deploy \
-  --apphost src/WithLove.AppHost/WithLove.AppHost.csproj \
-  --environment azureprod \
-  --list-steps
+# Optional: preview the pipeline without provisioning anything
+just deploy-preview
 
 # Recommended developer workflow
 just deploy
@@ -159,7 +159,7 @@ After the deploy completes, the shopSite external URL is printed in the output, 
 https://shopsite.victoriousbeach-abc123.eastus.azurecontainerapps.io
 ```
 
-Keep this URL — you need it in the next step.
+The deployment recipe reads this URL itself when it configures the Stripe Event Destination.
 
 If you change the Azure location or resource group, use:
 
@@ -175,29 +175,26 @@ Aspire 13.5 fixes the earlier Azure SQL role script that could fail in `Invoke-S
 
 The AppHost therefore continues to disable the default SQL role assignments and deploy one repository-owned `sql-identity-access` Bicep resource instead. It acquires an Azure SQL token, uses the in-box `System.Data.SqlClient`, reconciles the shared identity's database user by SID, and grants `db_owner` idempotently. Remove this workaround only after verifying through published artifacts and a disposable Azure deployment that the default model emits one safe role-provisioning path for the shared identity.
 
-## Step 4 — Create the Stripe Event Destination
+## Step 4 — Stripe Event Destination automation
 
-The Stripe CLI container used in development is replaced by a Stripe Event Destination in production. This destination sends webhook events to shopSite.
+The Stripe CLI container used in development is replaced by a Stripe Event Destination in
+production. After Azure provisioning and the Redis health check succeed, `just deploy`:
 
-1. Go to **Stripe Dashboard -> Workbench -> Webhooks -> Create an event destination**
-2. Event source: **Your account**
-3. Payload format: **Snapshot** (preserves the v1 object format — no code changes needed)
-4. Subscribe to events: `checkout.session.completed`, `checkout.session.expired`
-5. Destination type: **Webhook endpoint**
-6. URL: `https://{your-shopsite-domain}/stripe/webhook`
-7. Save. On the destination detail page, click **"Click to reveal"** next to the signing secret and copy the `whsec_...` value.
+1. Reads the shopSite ingress URL from Azure.
+2. Creates or reconciles the managed Stripe Event Destination for
+   `https://{shopsite-fqdn}/stripe/webhook` and the required checkout events.
+3. Records the signing secret in `.secrets.env` and installs it in Key Vault.
+4. Restarts the shopSite revision so Stripe signature verification uses the new secret.
 
-## Step 5 — Update the webhook secret and redeploy
+Do not create this Event Destination or copy its signing secret manually. A failed automation run
+may already have created an endpoint, so manually creating another can leave duplicate Stripe
+destinations with different signing secrets.
 
-`aspire deploy` manages its own parameter cache (see Step 1) independently of `aspire secret set`. Running `aspire secret set` here would update the local dev user secrets — not the deploy cache — so the placeholder would remain and Stripe webhook verification would fail.
-
-Replace `Parameters__stripe_webhook_secret` in `.secrets.env`, then deploy:
-
-```bash
-just deploy
-```
-
-The recipe sources `.secrets.env`, and the explicit value takes precedence over Aspire's cached parameter value. The deploy writes the updated secret to Key Vault and Container Apps picks it up.
+For one-pass completion, the deploying identity needs Key Vault data-plane `get`, `set`, and
+`delete` permissions: the recipe discovers the generated vault, writes the signing secret, and
+removes its preflight secret. If those permissions are unavailable, the recipe safely records the
+new value in `.secrets.env`, deliberately reports a failed deployment, and tells you to run
+`just deploy` again. The second deployment installs that recorded value through Aspire.
 
 ## Verification checklist
 
@@ -226,22 +223,34 @@ az containerapp replica list \
 
 ## Non-interactive / CI deploy
 
-For CI using the repository recipe, have the CI secret store materialize `.secrets.env` using `.secrets.env.example` as the schema. Include every required value, including `Parameters__redis_password`, then run:
+For CI using the repository recipe, have the CI secret store materialize `.secrets.env` using
+`.secrets.env.example` as the schema. Include every required value, including
+`Parameters__redis_password`, but do **not** provide `Parameters__stripe_webhook_secret`; the
+recipe creates it.
 
 ```bash
 test -s .secrets.env
 just deploy
 ```
 
-If CI supplies environment variables directly instead of creating `.secrets.env`, use the direct `aspire deploy --non-interactive` command shown in the advanced section below.
+Grant the CI identity Key Vault data-plane `get`, `set`, and `delete` permissions when the job must
+complete in one deployment. Without them, the recipe saves the generated secret locally and exits
+non-zero so a reviewed second `just deploy` can install it. Do not treat that first failure as a
+successful deployment.
+
+If CI supplies environment variables directly instead of creating `.secrets.env`, use the direct `aspire deploy --non-interactive` command shown in the advanced section below. That direct command does not run the repository's Stripe automation.
 
 ## Secret rotation
 
-**Stripe webhook secret:** Rotate in Stripe Dashboard -> Webhooks -> select destination -> **Rotate secret**. Stripe accepts signatures from both the old and new secret for 24 hours. Replace `Parameters__stripe_webhook_secret` in `.secrets.env`, then deploy (`aspire secret set` updates local development secrets, not Azure deployment inputs):
+**Stripe webhook secret:** It is automation-owned. Do not rotate it in the Stripe Dashboard, because the application will not know the replacement value. If recovery requires a fresh Event Destination and signing secret, run:
 
 ```bash
-just deploy
+just recreate-stripe-webhook
 ```
+
+This is a recovery operation, not routine rotation: it deletes the managed Event Destination before
+creating a replacement, which creates a temporary delivery gap. Follow any non-zero result exactly;
+if Key Vault direct access is unavailable, run `just deploy` to install the locally recorded secret.
 
 **Arize AX credentials:** Replace `ARIZE_API_KEY`, `ARIZE_SPACE_ID`, or `ARIZE_OTLP_ENDPOINT` in
 `.secrets.env`, then deploy. These are Aspire parameter-backed application settings rather than Key
@@ -286,6 +295,18 @@ azd up --environment azureprod
 
 `azd up` and `aspire deploy` produce the same deployment — they use the same underlying Bicep generation from the AppHost.
 
+### Publish and deploy are separate pipelines
+
+`aspire publish` and `aspire deploy` build different step graphs. Publish contains `publish-prereq`;
+deploy contains `deploy-prereq`. A custom pipeline step anchored with `requiredBy` to a step that
+does not exist in the graph being run is **silently omitted** — no warning, no error, and the
+deployment proceeds without it.
+
+This matters for any AppHost step that guards a parameter or gates provisioning: a step verified
+only against `aspire publish --list-steps` can be absent from the deploy path that actually writes
+to Key Vault. Register such steps against both anchors, and confirm with `just deploy-preview`
+that the step appears in the deploy graph — not only in the publish graph.
+
 ## Useful commands
 
 | Command | Purpose |
@@ -297,7 +318,7 @@ azd up --environment azureprod
 | `aspire secret get <key>` | Read a single secret value |
 | `aspire secret delete <key>` | Remove a secret |
 | `aspire secret path` | Show path to the secrets JSON file |
-| `aspire deploy --apphost src/WithLove.AppHost/WithLove.AppHost.csproj --list-steps --environment azureprod` | Preview deploy steps without executing |
+| `just deploy-preview` | List the deploy pipeline's steps without provisioning anything |
 | `az containerapp logs show --name shopsite --resource-group withlove-rg` | Stream shopSite logs |
 | `az containerapp replica list --name workflowserver --resource-group withlove-rg` | Check workflowServer replicas |
 
