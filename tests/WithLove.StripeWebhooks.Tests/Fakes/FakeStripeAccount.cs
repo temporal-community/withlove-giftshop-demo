@@ -43,6 +43,36 @@ internal sealed class FakeStripeAccount : IHttpClient
     /// </summary>
     public Func<HttpMethod, string, bool>? FailWhen { get; set; }
 
+    /// <summary>
+    /// Whether an in-place <c>url</c> update mints a fresh signing secret for the endpoint.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The <c>false</c> default records observed Stripe behavior, not a documented
+    /// guarantee.</b> An in-place url update leaves the endpoint's signing secret untouched —
+    /// confirmed by direct testing against Stripe on 2026-09-14. That is the whole basis for
+    /// <c>ReconcileAsync</c> returning exit 11 "no secret written" and leaving the stored secret in
+    /// place.
+    /// </para>
+    /// <para>
+    /// <b>Why the switch stays.</b> Stripe could change this and the tool would never notice: the
+    /// secret is create-only (v1 retrieve omits it, v2 retrieve rejects
+    /// <c>include=webhook_endpoint.signing_secret</c>, and there is no rotate API), so a rotated
+    /// value is never returned by an update response — and the fake withholds it for the same
+    /// reason. Setting this to <c>true</c> is how a test states what that would cost us.
+    /// </para>
+    /// <para>
+    /// <b>Re-running the check</b>, should Stripe's behavior ever come into doubt. In a sandbox
+    /// account: create an endpoint and record the secret from the create response; update that
+    /// endpoint's url; have Stripe deliver a signed event to the new url; then pass that delivery's
+    /// raw payload and its <c>Stripe-Signature</c> header to <c>EventUtility.ValidateSignature</c>
+    /// together with the recorded create-time secret. Validating means this default is still
+    /// correct. A <c>StripeException</c> means it must flip to <c>true</c> and the reconcile path
+    /// must recreate rather than update.
+    /// </para>
+    /// </remarks>
+    public bool RotateSecretOnUrlUpdate { get; set; }
+
     public IReadOnlyList<FakeEndpoint> Endpoints => _endpoints;
 
     public FakeEndpoint Seed(
@@ -153,10 +183,18 @@ internal sealed class FakeStripeAccount : IHttpClient
         return Serialize(endpoint, includeSecret: true);
     }
 
-    private static void Update(FakeEndpoint endpoint, IReadOnlyDictionary<string, string> body)
+    private void Update(FakeEndpoint endpoint, IReadOnlyDictionary<string, string> body)
     {
         if (body.TryGetValue("url", out var url))
+        {
+            // See RotateSecretOnUrlUpdate: off by default because Stripe is confirmed to preserve
+            // the secret here, on when a test asks what would break if that ever changed. The new
+            // value is not put in the response, because Stripe would not put it there either.
+            if (RotateSecretOnUrlUpdate && !string.Equals(url, endpoint.Url, StringComparison.Ordinal))
+                endpoint.Secret = $"whsec_{Guid.NewGuid():N}";
+
             endpoint.Url = url;
+        }
 
         if (body.TryGetValue("description", out var description))
             endpoint.Description = description;
@@ -266,7 +304,12 @@ internal sealed class FakeStripeAccount : IHttpClient
 
         public required string Status { get; set; }
 
-        public required string Secret { get; init; }
+        /// <summary>
+        /// Settable only so <see cref="RotateSecretOnUrlUpdate"/> can express a rotation. Nothing
+        /// in the create or reconcile paths writes it; see that property for why the switch is
+        /// still here.
+        /// </summary>
+        public required string Secret { get; set; }
     }
 
     /// <summary>A client wired to this fake account, with a well-formed test key.</summary>

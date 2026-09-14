@@ -185,11 +185,22 @@ public class StripeWebhookProvisionerTests : IDisposable
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.StripeWebhooks)]
-    public async Task Ensure_AfterADestroyAndRedeploy_MovesTheUrlAndKeepsTheSecret()
+    public async Task Ensure_AfterAnFqdnChange_MovesTheUrlWithoutMintingOrRewritingALocalSecret()
     {
-        // The Container Apps domain suffix is regenerated per environment, so the FQDN changes
-        // across a destroy/redeploy. Metadata identity survives it; matching on URL would not, and
-        // would orphan the old endpoint while minting a secret nobody asked for.
+        // What actually reaches this path. NOT a normal destroy/redeploy: `just destroy` deletes the
+        // Stripe endpoint before Azure teardown begins and then clears
+        // Parameters__stripe_webhook_secret, so the next deploy finds nothing of ours and takes the
+        // *create* path. Reconcile-with-a-moved-url happens when a previous teardown's Stripe leg
+        // failed (the endpoint survived, and the stored secret was deliberately left alone) or when
+        // the FQDN moved with no destroy at all. Either way the Container Apps domain suffix is
+        // different, so matching on URL would orphan the survivor and mint a secret nobody asked
+        // for; metadata identity is what finds it.
+        //
+        // Scope of the secret assertion below: it says *we* neither minted nor rewrote the local
+        // file, which is what exit 11 promises the caller. Stripe keeping the endpoint's signing
+        // secret across the url update is confirmed by direct testing (2026-09-14), and
+        // Ensure_AfterAnFqdnChange_WouldShipAStaleSecretIfStripeRotatedOnUrlUpdate pins what would
+        // happen if that behavior ever changed.
         await RunAsync(CommandVerb.Ensure);
         var secretBefore = File.ReadAllText(SecretOut);
         var idBefore = _stripe.Endpoints[0].Id;
@@ -201,7 +212,44 @@ public class StripeWebhookProvisionerTests : IDisposable
         _stripe.Endpoints.Should().ContainSingle();
         _stripe.Endpoints[0].Id.Should().Be(idBefore);
         _stripe.Endpoints[0].Url.Should().Be(NewUrl);
-        File.ReadAllText(SecretOut).Should().Be(secretBefore);
+        File.ReadAllText(SecretOut).Should().Be(secretBefore, "the reconcile path must not touch --secret-out");
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.StripeWebhooks)]
+    public async Task Ensure_AfterAnFqdnChange_WouldShipAStaleSecretIfStripeRotatedOnUrlUpdate()
+    {
+        // A characterization test, not an aspiration: it pins what the tool does TODAY in a world
+        // where Stripe rotates the signing secret on a url update. It is green on purpose. Exit 11
+        // is correct if and only if Stripe preserves the secret, which direct testing confirms it
+        // does (2026-09-14) — but that is observed behavior, not a contract, and the tool could
+        // never detect a change to it (see FakeStripeAccount.RotateSecretOnUrlUpdate). Keeping the
+        // consequence pinned and greppable is how we would recognize such a change if it came.
+        _stripe.RotateSecretOnUrlUpdate = true;
+
+        await RunAsync(CommandVerb.Ensure);
+        var secretOnDisk = File.ReadAllText(SecretOut).Trim();
+
+        var result = await RunAsync(CommandVerb.Ensure, url: NewUrl);
+
+        // Unchanged from the non-rotating case: the tool reports a clean reconcile and tells the
+        // caller its stored secret is still good. `just ensure-stripe-webhook` maps exit 11 to
+        // "No new signing secret was issued, so the stored one remains correct." and exits 0.
+        result.ExitCode.Should().Be(ExitCode.Reconciled);
+        result.Status.Should().Contain("no secret written");
+        result.Errors.Should().BeEmpty();
+
+        // ...and here is the damage that claim would be hiding. The file still holds the create-time
+        // secret while the live endpoint signs with a different one, so every delivery fails
+        // signature verification until somebody runs `recreate`.
+        File.ReadAllText(SecretOut).Trim().Should().Be(secretOnDisk);
+        _stripe.Endpoints[0].Secret.Should().NotBe(secretOnDisk);
+
+        // Drift detection cannot catch it either. The fingerprint still describes the stale file —
+        // the reassuring answer — and the live secret it would need for comparison is unreadable.
+        _stripe.Endpoints[0].Metadata[WebhookIdentity.FingerprintKey]
+            .Should().Be(SecretFingerprint.Compute(secretOnDisk));
     }
 
     [Fact]

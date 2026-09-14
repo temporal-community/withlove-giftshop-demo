@@ -43,7 +43,9 @@ internal static class ExitCode
     /// <summary>
     /// Our endpoint already existed and was reconciled in place. No secret was written, because a
     /// signing secret is readable exactly once — in the body of the create response — and there is
-    /// no rotate API in either Stripe API version. The caller must keep the secret it already has.
+    /// no rotate API in either Stripe API version. The caller must keep the secret it already has,
+    /// which stays correct across an FQDN change: an in-place url update preserves the endpoint's
+    /// signing secret, confirmed by direct testing against Stripe on 2026-09-14.
     /// </summary>
     public const int Reconciled = 11;
 }
