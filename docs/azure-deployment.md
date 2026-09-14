@@ -127,7 +127,7 @@ Before deploying, the recipe verifies that the active Azure CLI subscription and
 
 - Azure subscription
 - Azure region (for example, `eastus`)
-- Resource group name (for example, `withlove-rg`)
+- Resource group name (`Azure__ResourceGroup`; `.secrets.env.example` defaults to `rg-aspire-withlove`)
 
 After the deploy completes, the shopSite external URL is printed in the output, for example:
 
@@ -180,8 +180,9 @@ After deploy completes:
 6. Confirm workflowServer has at least one replica running:
 
 ```bash
+source .secrets.env
 az containerapp replica list \
-  --resource-group withlove-rg \
+  --resource-group "${Azure__ResourceGroup}" \
   --name workflowserver
 ```
 
@@ -233,8 +234,12 @@ Azure resource-group deletion is asynchronous and can spend an extended period i
 | `just deploy-preview` | List the deploy pipeline's steps without provisioning anything |
 | `just install-stripe-webhook-secret` | Push the `.secrets.env` signing secret into Key Vault and restart shopsite |
 | `just verify-stripe-webhook-secret` | Check the Stripe signing secret agrees across `.secrets.env`, Key Vault and Stripe |
-| `az containerapp logs show --name shopsite --resource-group withlove-rg` | Stream shopSite logs |
-| `az containerapp replica list --name workflowserver --resource-group withlove-rg` | Check workflowServer replicas |
+| `az containerapp logs show --name shopsite --resource-group "${Azure__ResourceGroup}"` | Stream shopSite logs |
+| `az containerapp replica list --name workflowserver --resource-group "${Azure__ResourceGroup}"` | Check workflowServer replicas |
+
+The `az` commands read the resource group from `.secrets.env` — `source .secrets.env` first, in the
+repository root. The `just` recipes do this themselves; there is no hardcoded group name to keep in
+sync.
 
 ## Troubleshooting
 
