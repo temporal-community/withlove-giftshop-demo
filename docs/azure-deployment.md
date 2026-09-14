@@ -145,7 +145,6 @@ just deploy-clean
 
 `just deploy` also purges matching soft-deleted Key Vaults from the configured disposable resource group, waits for resource-group transitions to finish, and retries only confirmed Azure pending-deletion conditions. Deterministic deployment failures are returned immediately. After a successful deployment, it restarts the Redis revision so a rotated `redis-password` is loaded by the running Redis process before clients reconnect.
 
-
 ## Step 4 — Stripe Event Destination automation
 
 The Stripe CLI container used in development is replaced by a Stripe Event Destination in
@@ -161,11 +160,13 @@ Do not create this Event Destination or copy its signing secret manually. A fail
 may already have created an endpoint, so manually creating another can leave duplicate Stripe
 destinations with different signing secrets.
 
-For one-pass completion, the deploying identity needs Key Vault data-plane `get`, `set`, and
-`delete` permissions: the recipe discovers the generated vault, writes the signing secret, and
-removes its preflight secret. If those permissions are unavailable, the recipe safely records the
-new value in `.secrets.env`, deliberately reports a failed deployment, and tells you to run
-`just deploy` again. The second deployment installs that recorded value through Aspire.
+For one-pass completion, the deploying identity needs Key Vault data-plane `get` and `set`
+(`Key Vault Secrets Officer`); `delete` is not used and the preflight probe secret stays by design.
+Without them the recipe records the value in `.secrets.env` and reports a failed deployment.
+**Re-running `just deploy` does not install it** — the secret is a deployment parameter, not
+template content, so an unchanged template short-circuits and Key Vault keeps the stale value.
+Repair with `just install-stripe-webhook-secret` (writes the vault, restarts shopsite) and confirm
+with `just verify-stripe-webhook-secret`; `just destroy && just deploy` is the heavy alternative.
 
 ## Verification checklist
 
@@ -202,19 +203,15 @@ just recreate-stripe-webhook
 
 This is a recovery operation, not routine rotation: it deletes the managed Event Destination before
 creating a replacement, which creates a temporary delivery gap. Follow any non-zero result exactly;
-if Key Vault direct access is unavailable, run `just deploy` to install the locally recorded secret.
+if the Key Vault write did not land, run `just install-stripe-webhook-secret` — not `just deploy`.
 
 **Arize AX credentials:** Replace `ARIZE_API_KEY`, `ARIZE_SPACE_ID`, or `ARIZE_OTLP_ENDPOINT` in
 `.secrets.env`, then deploy. These are Aspire parameter-backed application settings rather than Key
 Vault references, so an AX credential or destination change requires a new application revision.
 
-**Other Key Vault-backed secrets:** Replace the corresponding value in `.secrets.env`, then deploy.
-Key Vault secrets are picked up by Container Apps within approximately 30 minutes automatically —
-a forced restart is not required for non-critical rotations.
-
-```bash
-just deploy
-```
+**Other Key Vault-backed secrets:** Replace the value in `.secrets.env`, then `just deploy-clean` —
+a plain `just deploy` does not rewrite an existing Key Vault secret, for the same reason as above.
+Secrets reach the app as environment variables fixed at container start, so restart the revision.
 
 ## Teardown
 
@@ -234,6 +231,8 @@ Azure resource-group deletion is asynchronous and can spend an extended period i
 | `just deploy-clean` | Deploy with fresh Aspire state after infrastructure-level changes |
 | `just destroy` | Tear down Azure resources, wait for deletion, and clean up Key Vaults |
 | `just deploy-preview` | List the deploy pipeline's steps without provisioning anything |
+| `just install-stripe-webhook-secret` | Push the `.secrets.env` signing secret into Key Vault and restart shopsite |
+| `just verify-stripe-webhook-secret` | Check the Stripe signing secret agrees across `.secrets.env`, Key Vault and Stripe |
 | `az containerapp logs show --name shopsite --resource-group withlove-rg` | Stream shopSite logs |
 | `az containerapp replica list --name workflowserver --resource-group withlove-rg` | Check workflowServer replicas |
 

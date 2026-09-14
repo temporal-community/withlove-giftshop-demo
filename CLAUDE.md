@@ -95,8 +95,8 @@ dotnet run --project tools/WithLove.OpenInference.Generator -- verify
 
 ## Testing
 
-Four test projects: `WithLove.Web.Tests`, `WithLove.Workflows.Tests`,
-`WithLove.ProductsAPI.Tests`, and `WithLove.Telemetry.Tests`.
+Test projects: `WithLove.Web.Tests`, `WithLove.Workflows.Tests`, `WithLove.ProductsAPI.Tests`,
+`WithLove.Telemetry.Tests`, and `WithLove.StripeWebhooks.Tests`.
 
 **Test counts are deliberately not recorded here.** They change with every commit that adds a test,
 and a stale count in documentation is worse than no count — it gets cited, trusted, and repeated.
@@ -152,6 +152,7 @@ dotnet test tests/WithLove.Web.Tests/WithLove.Web.Tests.csproj
 dotnet test tests/WithLove.Workflows.Tests/WithLove.Workflows.Tests.csproj
 dotnet test tests/WithLove.ProductsAPI.Tests/WithLove.ProductsAPI.Tests.csproj
 dotnet test tests/WithLove.Telemetry.Tests/WithLove.Telemetry.Tests.csproj
+dotnet test tests/WithLove.StripeWebhooks.Tests/WithLove.StripeWebhooks.Tests.csproj
 ```
 
 CI is unaffected: it partitions by `Category=Unit` / `Category!=Unit`, so the AppHost suite is
@@ -195,7 +196,8 @@ This is a .NET Aspire distributed application using the XML-based `.slnx` soluti
 - **WithLove.OpenInference.Generator** — Development tool that regenerates the checked-in OpenInference attribute vocabulary.
 - **WithLove.Telemetry.Verifier** — Runtime verification tool for unified chat trace shape and privacy invariants.
 
-The four projects under `tests/` cover Web, workflows, ProductsAPI, and telemetry behavior.
+The projects under `tests/` cover Web, workflows, ProductsAPI, telemetry, and the Stripe webhook
+provisioning tool.
 
 ### Key Dependencies
 
