@@ -193,6 +193,15 @@ az containerapp replica list \
    are exported by workflowServer
 10. Refresh/reconnect the shop UI and confirm only user and final assistant text is rendered; tool
     protocol remains internal to Temporal/model context
+11. Open the managed Aspire dashboard at the URL printed at the end of the deploy and confirm each
+    Container App reports logs and metrics
+
+**Managed Aspire dashboard.** `aspire deploy` provisions it automatically — the AppHost never opts
+out and `EnableDashboard` defaults to `true` — and the deploy pipeline's
+`print-dashboard-url-withlove-env` step prints its URL at the end of a run. It is served at
+`https://aspire-dashboard.ext.<env-domain>/`. Custom domains are not supported for it, so that
+default `.ext` hostname is the only way in. If it refuses to authenticate, see
+[Aspire dashboard authentication failure](#aspire-dashboard-authentication-failure).
 
 ## Secret rotation
 
@@ -242,6 +251,27 @@ repository root. The `just` recipes do this themselves; there is no hardcoded gr
 sync.
 
 ## Troubleshooting
+
+### Aspire dashboard authentication failure
+
+The managed dashboard can return `Could not authenticate user with requested resource.` even when
+your Azure CLI and the portal work normally against the same subscription.
+
+The usual cause is a stale browser session, not a missing role. The dashboard's Entra authorize
+endpoint is pinned to the tenant rather than `/common`, so it presents no account picker and
+silently reuses whatever session the browser already holds. If that session belongs to a second
+identity without role assignments on the subscription, the dashboard fails while every ARM call you
+make as your privileged account keeps succeeding — which is what makes it look like a deployment
+problem.
+
+The remedy is client-side: open the dashboard in a clean private/incognito window and sign in
+explicitly as the account that owns the subscription. Nothing in the deployment or its Bicep needs
+to change.
+
+A separate, genuinely different cause produces the same message: when dashboard access is granted
+through an Entra group, group-membership propagation can lag. Microsoft documents that case in the
+[Azure Container Apps Aspire dashboard guide](https://learn.microsoft.com/azure/container-apps/aspire-dashboard).
+Rule out the stale session first — it is the one this project has actually hit.
 
 ### Deployment parameter cache
 
