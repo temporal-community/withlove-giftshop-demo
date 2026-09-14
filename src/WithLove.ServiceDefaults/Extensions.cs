@@ -14,6 +14,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Temporalio.Extensions.OpenTelemetry;
 using WithLove.OpenInference;
+using WithLove.ServiceDefaults.Telemetry;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -130,6 +131,12 @@ public static class Extensions
                 }
                 else if (routing.TraceDestination == TraceExportDestination.Ax)
                 {
+                    // Arize AX categorizes spans by openinference.span.kind. Drop the auto-instrumented
+                    // infrastructure spans (ASP.NET, HttpClient, EF Core, Temporal SDK) that carry no
+                    // kind so the LLM-observability views show agent spans instead of "UNKNOWN" noise.
+                    // Registered before the exporter and only on the AX path — the Aspire dashboard and
+                    // Phoenix destinations keep full-fidelity infrastructure traces.
+                    tracing.AddProcessor(new OpenInferenceOnlyExportProcessor());
                     tracing.AddOtlpExporter("arize-ax", options =>
                     {
                         options.Endpoint = routing.Ax!.Endpoint;
