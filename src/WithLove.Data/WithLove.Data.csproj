@@ -14,7 +14,7 @@
 <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
 
     <!-- Aspire Integration -->
-    <PackageReference Include="Aspire.Microsoft.EntityFrameworkCore.SqlServer" Version="13.5.3" />
+    <PackageReference Include="Aspire.Microsoft.EntityFrameworkCore.SqlServer" Version="13.5.4" />
   </ItemGroup>
 
 </Project>

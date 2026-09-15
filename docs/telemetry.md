@@ -77,6 +77,9 @@ just run-phoenix
 just run-phoenix --capture
 just run-ax
 just run-ax --capture
+
+# Azure deployment with AI payload capture explicitly enabled
+just deploy --capture
 ```
 
 Captured prompts, responses, system instructions, and tool payloads can contain customer or

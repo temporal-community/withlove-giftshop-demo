@@ -121,6 +121,9 @@ just deploy-preview
 
 # Recommended developer workflow
 just deploy
+
+# Explicit opt-in to include AI inputs, outputs, system instructions, and tool payloads in telemetry
+just deploy --capture
 ```
 
 Before deploying, the recipe verifies that the active Azure CLI subscription and tenant match `.secrets.env`. It fails before provisioning if they do not match. The required Azure targeting values are:
@@ -128,6 +131,13 @@ Before deploying, the recipe verifies that the active Azure CLI subscription and
 - Azure subscription
 - Azure region (for example, `eastus`)
 - Resource group name (`Azure__ResourceGroup`; `.secrets.env.example` defaults to `rg-aspire-withlove`)
+
+AI content capture is disabled by default. `just deploy --capture` sets
+`Telemetry__CaptureAiContent=true` for that deployment after `.secrets.env` is loaded, so the
+explicit command-line opt-in takes precedence over a value in the file. Capture can export chat
+inputs and outputs, model messages and system instructions, and tool arguments and results; use it
+only when that data is appropriate for the configured telemetry backend. It affects new telemetry
+only and does not redact or delete existing traces.
 
 After the deploy completes, the shopSite external URL is printed in the output, for example:
 

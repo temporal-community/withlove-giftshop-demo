@@ -201,9 +201,11 @@ write-stripe-webhook-secret:
 # Deploy the application to Azure using the shared production defaults.
 # Requires .secrets.env in the repo root — copy .secrets.env.example and fill in your values.
 #   just deploy                      # deploy to azureprod (uses cached state)
+#   just deploy --capture            # deploy and capture AI payload content in telemetry
 #   just deploy staging              # deploy to a different environment
 #   just deploy-clean                # deploy with fresh Aspire state
-deploy environment="azureprod" reset_state="false":
+[arg("capture", long="capture", value="true")]
+deploy environment="azureprod" reset_state="false" capture="false":
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ ! -f .secrets.env ]]; then
@@ -211,6 +213,12 @@ deploy environment="azureprod" reset_state="false":
         exit 1
     fi
     source .secrets.env
+
+    # Apply the command-line privacy opt-in after loading local deployment settings, so
+    # `just deploy --capture` cannot be accidentally overridden by .secrets.env.
+    if [[ "{{capture}}" == "true" ]]; then
+        export Telemetry__CaptureAiContent=true
+    fi
 
     : "${Azure__SubscriptionId:?Azure__SubscriptionId is required}"
     : "${Azure__ResourceGroup:?Azure__ResourceGroup is required}"
@@ -414,9 +422,11 @@ deploy environment="azureprod" reset_state="false":
 # Like deploy, but drops the cached deployment state first.
 # Use this after changing Azure__Location, Azure__ResourceGroup, or similar infra-level settings.
 #   just deploy-clean           # deploy to azureprod with fresh state
+#   just deploy-clean --capture # deploy with fresh state and capture AI payload content
 #   just deploy-clean staging   # deploy to staging with fresh state
-deploy-clean environment="azureprod":
-    just deploy "{{environment}}" true
+[arg("capture", long="capture", value="true")]
+deploy-clean environment="azureprod" capture="false":
+    just deploy "{{environment}}" true "{{capture}}"
 
 # Read-only: `aspire deploy --list-steps` enumerates the pipeline and exits. It runs none of
 # `deploy`'s safeguards — no subscription guard, no Key Vault purge, no resource-group wait —

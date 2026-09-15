@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.5.3">
+<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -28,12 +28,12 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.5.3" />
-      <PackageReference Include="Aspire.Hosting.Azure.KeyVault" Version="13.5.3" />
-      <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="13.5.3" />
-      <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.5.3" />
-      <PackageReference Include="Aspire.Hosting.Redis" Version="13.5.3" />
-      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.5.3" />
+      <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.5.4" />
+      <PackageReference Include="Aspire.Hosting.Azure.KeyVault" Version="13.5.4" />
+      <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="13.5.4" />
+      <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.5.4" />
+      <PackageReference Include="Aspire.Hosting.Redis" Version="13.5.4" />
+      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.5.4" />
       <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.5.0" />
       <PackageReference Include="Stripe.Hosting.Aspire" Version="0.6.4" />
       <PackageReference Include="TemporalCommunity.Aspire.Hosting" Version="0.4.0" />

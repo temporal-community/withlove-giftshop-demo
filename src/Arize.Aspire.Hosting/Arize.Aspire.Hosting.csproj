@@ -9,6 +9,6 @@
     <PackageTags>aspire;arize;phoenix;ax;opentelemetry</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting" Version="13.5.3" />
+    <PackageReference Include="Aspire.Hosting" Version="13.5.4" />
   </ItemGroup>
 </Project>
