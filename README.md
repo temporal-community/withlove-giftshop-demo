@@ -39,16 +39,24 @@ The root `justfile` exposes all four supported local combinations:
 
 | Destination | AI payload content | Command |
 |---|---|---|
+| Aspire dashboard | Redacted/omitted | `just run-aspire` |
+| Aspire dashboard | Captured | `just run-aspire --capture` |
 | Phoenix | Redacted/omitted | `just run` or `just run-phoenix` |
 | Phoenix | Captured | `just run-phoenix --capture` |
+| Phoenix | All trace spans | `just run-phoenix --all-traces` |
 | Arize AX | Redacted/omitted | `just run-ax` |
 | Arize AX | Captured | `just run-ax --capture` |
+| Arize AX | All trace spans | `just run-ax --all-traces` |
 
 The `--capture` flag is an explicit opt-in. It permits the Web and WorkflowServer resources to
 export chat inputs and outputs, model messages and system instructions, and tool arguments and
 results. Product retrieval and embedding payloads remain hidden. Captured content can contain
 customer or business-sensitive data, and changing the flag affects only new telemetry; it does not
 redact or delete data already retained by Phoenix or AX.
+
+`--all-traces` is a separate diagnostic opt-out from AI-only filtering. It sets
+`Trace__AiOnly=false` for the run, so Phoenix or AX receives all trace spans. It does not capture
+AI payload content; combine it with `--capture` only when both are deliberately needed.
 
 Before using AX, store its connection values in the Aspire secret store. Use the endpoint and
 base64 space ID shown on the AX connect page; the sample does not assume an AX region.
@@ -64,11 +72,15 @@ The equivalent direct Aspire commands are:
 
 ```bash
 # Phoenix, content hidden
-Arize__TraceDestination=Phoenix Telemetry__CaptureAiContent=false \
+Trace__Destination=Phoenix Telemetry__CaptureAiContent=false \
   aspire start --apphost src/WithLove.AppHost/WithLove.AppHost.csproj
 
 # AX, content explicitly captured
-Arize__TraceDestination=Ax Telemetry__CaptureAiContent=true \
+Trace__Destination=Ax Telemetry__CaptureAiContent=true \
+  aspire start --apphost src/WithLove.AppHost/WithLove.AppHost.csproj
+
+# Aspire dashboard, content hidden
+Trace__Destination=Aspire Telemetry__CaptureAiContent=false \
   aspire start --apphost src/WithLove.AppHost/WithLove.AppHost.csproj
 ```
 
@@ -76,7 +88,8 @@ Configuration keys use `:` in configuration and `__` in environment-variable for
 
 | Setting | Default | Effect |
 |---|---|---|
-| `Arize:TraceDestination` / `Arize__TraceDestination` | Phoenix locally; AX when published | Selects `Phoenix` or `Ax` for traces only. The two exporters are mutually exclusive. |
+| `Trace:Destination` / `Trace__Destination` | Phoenix locally; AX when published | Selects `Aspire`, `Phoenix`, or `Ax` as the sole trace destination. |
+| `Trace:AiOnly` / `Trace__AiOnly` | `true` | Sends only the connected AI trajectory to Phoenix or AX; Aspire always receives full traces. Set `false` only to send all selected-backend traces. |
 | `Telemetry:CaptureAiContent` / `Telemetry__CaptureAiContent` | `false` | Application-level authorization for sensitive AI payload export. This is what `--capture` sets. |
 
 `Telemetry:CaptureAiContent` is the only setting that can authorize AI payload capture. It defaults
@@ -87,6 +100,21 @@ not sent to Aspire's log or metric exporters.
 > `Parameters:stripe-webhook-secret` is **not** set locally. The Stripe CLI container runs
 > `stripe listen` and supplies a fresh signing secret each session. It is a publish/Azure-only
 > parameter, sourced from `.secrets.env` — see `docs/azure-deployment.md`.
+
+### Azure deployment settings
+
+`just deploy` reads deployment inputs from `.secrets.env`, not the local Aspire secret store. The
+following values are required for the standard Azure deployment:
+
+| Group | Required values | Default or exception |
+|---|---|---|
+| Azure target | `Azure__SubscriptionId`, `Azure__ResourceGroup`, `Azure__Location` | `Azure__TenantId` is optional but, when supplied, must match the signed-in Azure CLI tenant. |
+| Application | `Parameters__openai_api_key`, `Parameters__redis_password`, `Parameters__stripe_api_key`, `Parameters__stripe_public_key`, `Parameters__temporal_address`, `Parameters__temporal_namespace`, `Parameters__temporal_api_key` | `Parameters__stripe_webhook_secret` is automation-owned; do not supply it. |
+| Trace export | `ARIZE_OTLP_ENDPOINT`, `ARIZE_API_KEY`, `ARIZE_SPACE_ID` | Required by the published default, `Trace:Destination=Ax`. Choose `Trace__Destination=Aspire` to use the managed Aspire dashboard, or `Phoenix` to deploy an internal, ephemeral Phoenix instance for this demo; either selection omits AX credentials. |
+
+`Trace:AiOnly` defaults to `true`; `Telemetry:CaptureAiContent` defaults to `false`. The optional
+`just deploy --capture` switch sets capture to `true` for that invocation. The complete setup,
+including Key Vault permissions for Stripe automation, is in [Azure deployment](docs/azure-deployment.md).
 
 Verify your secrets are stored:
 

@@ -34,6 +34,7 @@ public class OtlpExporterIntegrationTests
             ["Phoenix:OtlpTracesEndpoint"] = usePhoenix
                 ? new Uri(phoenix.BaseUri, "v1/traces").AbsoluteUri
                 : null,
+            ["Trace:AiOnly"] = "false",
             ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
         builder.ConfigureOpenTelemetry();
@@ -80,6 +81,7 @@ public class OtlpExporterIntegrationTests
             ["Arize:Tracing:Ax:Protocol"] = "http/protobuf",
             ["Arize:Tracing:Ax:ApiKey"] = apiKey,
             ["Arize:Tracing:Ax:SpaceId"] = spaceId,
+            ["Trace:AiOnly"] = "false",
             ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
         builder.ConfigureOpenTelemetry();
@@ -109,5 +111,67 @@ public class OtlpExporterIntegrationTests
         aspire.Requests.Should().OnlyContain(captured =>
             !captured.Headers.ContainsKey("arize-api-key")
             && !captured.Headers.ContainsKey("arize-space-id"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExportedTrace_AiOnlyRetainsTheConnectedAiSpineForEachArizeDestination(bool usePhoenix)
+    {
+        await using var aspire = await OtlpTestServer.StartAsync();
+        await using var arize = await OtlpTestServer.StartAsync();
+        var sourceName = $"WithLove.AiOnlyExport.{Guid.NewGuid():N}";
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { ApplicationName = sourceName });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["OTEL_EXPORTER_OTLP_ENDPOINT"] = aspire.BaseUri.AbsoluteUri,
+            ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf",
+            ["Phoenix:OtlpTracesEndpoint"] = usePhoenix
+                ? new Uri(arize.BaseUri, "v1/traces").AbsoluteUri
+                : null,
+            ["Arize:Tracing:Ax:Endpoint"] = usePhoenix
+                ? null
+                : new Uri(arize.BaseUri, "v1").AbsoluteUri,
+            ["Arize:Tracing:Ax:Protocol"] = usePhoenix ? null : "http/protobuf",
+            ["Arize:Tracing:Ax:ApiKey"] = usePhoenix ? null : "ax-api-key-sentinel",
+            ["Arize:Tracing:Ax:SpaceId"] = usePhoenix ? null : "ax-space-id-sentinel",
+            ["Trace:AiOnly"] = "true",
+        });
+        builder.ConfigureOpenTelemetry();
+        using var host = builder.Build();
+        await host.StartAsync();
+
+        using var source = new ActivitySource(sourceName);
+        using (var chain = source.StartActivity("chat.turn"))
+        {
+            chain!.SetTag(OpenInferenceAttributes.OpenInferenceSpanKind, "CHAIN");
+            chain.SetTag("chat.operation_id", "operation-123");
+            using (source.StartActivity("durable.turn"))
+            {
+                using (var model = source.StartActivity("openai.chat"))
+                    model!.SetTag("gen_ai.operation.name", "chat");
+                using (var tool = source.StartActivity("execute_tool search_products"))
+                {
+                    tool!.SetTag(OpenInferenceAttributes.OpenInferenceSpanKind, "TOOL");
+                    using (var retriever = source.StartActivity("product.search"))
+                        retriever!.SetTag(OpenInferenceAttributes.OpenInferenceSpanKind, "RETRIEVER");
+                }
+            }
+        }
+        using (source.StartActivity("HTTP GET /collections")) { }
+        using (var embeddings = source.StartActivity("openai.embeddings"))
+            embeddings!.SetTag("gen_ai.operation.name", "embeddings");
+
+        host.Services.GetRequiredService<TracerProvider>().ForceFlush(5_000).Should().BeTrue();
+        var request = await arize.WaitForAsync("/v1/traces");
+        var wireText = Encoding.UTF8.GetString(request.Body);
+        wireText.Should().Contain("chat.turn");
+        wireText.Should().Contain("durable.turn");
+        wireText.Should().Contain("openai.chat");
+        wireText.Should().Contain("execute_tool search_products");
+        wireText.Should().Contain("product.search");
+        wireText.Should().NotContain("HTTP GET /collections");
+        wireText.Should().NotContain("openai.embeddings");
+        aspire.Requests.Should().NotContain(captured => captured.Path == "/v1/traces");
     }
 }

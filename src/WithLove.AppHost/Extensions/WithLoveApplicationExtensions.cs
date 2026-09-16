@@ -12,8 +12,10 @@ internal static partial class WithLoveApplicationExtensions
 {
     private const string ProductsDatabaseResourceName = "productsDatabase";
     private const string OpenInferenceProjectName = "withlove-giftshop";
-    private const string ArizeTraceDestinationConfigurationKey = "Arize:TraceDestination";
+    private const string TraceDestinationConfigurationKey = "Trace:Destination";
+    private const string AiOnlyTraceConfigurationKey = "Trace:AiOnly";
     private const string CaptureAiContentConfigurationKey = "Telemetry:CaptureAiContent";
+    private const string AiOnlyTraceEnvironmentVariable = "Trace__AiOnly";
     private const string CaptureAiContentEnvironmentVariable = "Telemetry__CaptureAiContent";
     private const string AspireGenAiCaptureMessageContentEnvironmentVariable =
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
@@ -48,9 +50,11 @@ internal static partial class WithLoveApplicationExtensions
         var captureAiContent = ResolveCaptureAiContent(
             builder.Configuration[CaptureAiContentConfigurationKey]);
         ConfigureAiContentCapture(application, captureAiContent);
-        var useAx = ResolveUseAxTraceDestination(
-            builder.Configuration[ArizeTraceDestinationConfigurationKey],
+        var traceDestination = ResolveTraceDestination(
+            builder.Configuration[TraceDestinationConfigurationKey],
             isPublishMode);
+        var aiOnlyTrace = ResolveAiOnlyTrace(builder.Configuration[AiOnlyTraceConfigurationKey]);
+        ConfigureAiOnlyTrace(application, aiOnlyTrace);
 
         if (isPublishMode)
         {
@@ -61,27 +65,46 @@ internal static partial class WithLoveApplicationExtensions
             ConfigureLocalDependencies(builder, application, parameters);
         }
 
-        ConfigureTraceDestination(builder, application, useAx);
+        ConfigureTraceDestination(builder, application, traceDestination);
 
         ConfigureWorkflowServer(application.WorkflowServer);
         ConfigureShopSite(application.ShopSite);
     }
 
     /// <summary>
-    /// Resolves the Arize trace backend. Local runs default to Phoenix and published applications
+    /// Resolves the trace backend. Local runs default to Phoenix and published applications
     /// default to AX; either mode can be overridden explicitly for model and deployment testing.
     /// </summary>
-    internal static bool ResolveUseAxTraceDestination(string? configuredDestination, bool isPublishMode)
+    internal static TraceDestination ResolveTraceDestination(string? configuredDestination, bool isPublishMode)
     {
         if (string.IsNullOrWhiteSpace(configuredDestination))
-            return isPublishMode;
+            return isPublishMode ? TraceDestination.Ax : TraceDestination.Phoenix;
         if (configuredDestination.Equals("Ax", StringComparison.OrdinalIgnoreCase))
-            return true;
+            return TraceDestination.Ax;
         if (configuredDestination.Equals("Phoenix", StringComparison.OrdinalIgnoreCase))
+            return TraceDestination.Phoenix;
+        if (configuredDestination.Equals("Aspire", StringComparison.OrdinalIgnoreCase))
+            return TraceDestination.Aspire;
+
+        throw new InvalidOperationException(
+            $"Configuration '{TraceDestinationConfigurationKey}' must be 'Aspire', 'Ax', or 'Phoenix'.");
+    }
+
+    /// <summary>
+    /// Resolves whether Arize receives only the semantic AI trajectory. This setting has no effect
+    /// when the selected trace destination is Aspire.
+    /// </summary>
+    internal static bool ResolveAiOnlyTrace(string? configuredValue)
+    {
+        if (configuredValue is null)
+            return true;
+        if (configuredValue.Equals("true", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (configuredValue.Equals("false", StringComparison.OrdinalIgnoreCase))
             return false;
 
         throw new InvalidOperationException(
-            $"Configuration '{ArizeTraceDestinationConfigurationKey}' must be 'Ax' or 'Phoenix'.");
+            $"Configuration '{AiOnlyTraceConfigurationKey}' must be 'true' or 'false'.");
     }
 
     /// <summary>
@@ -373,12 +396,22 @@ internal static partial class WithLoveApplicationExtensions
         }
     }
 
+    private static void ConfigureAiOnlyTrace(WithLoveApplication application, bool aiOnly)
+    {
+        Configure(application.ProductsApi);
+        Configure(application.ShopSite);
+        Configure(application.WorkflowServer);
+
+        void Configure(IResourceBuilder<ProjectResource> resource) =>
+            resource.WithEnvironment(AiOnlyTraceEnvironmentVariable, aiOnly ? "true" : "false");
+    }
+
     private static void ConfigureTraceDestination(
         IDistributedApplicationBuilder builder,
         WithLoveApplication application,
-        bool useAx)
+        TraceDestination traceDestination)
     {
-        if (useAx)
+        if (traceDestination == TraceDestination.Ax)
         {
             var ax = builder.AddArizeAx("arize-ax", protocol: ArizeOtlpProtocol.HttpProtobuf);
             application.ProductsApi.WithReference(ax);
@@ -387,10 +420,23 @@ internal static partial class WithLoveApplicationExtensions
             return;
         }
 
-        var phoenix = builder.AddArize("arize");
-        application.ProductsApi.WithReference(phoenix).WaitFor(phoenix);
-        application.WorkflowServer.WithReference(phoenix).WaitFor(phoenix);
-        application.ShopSite.WithReference(phoenix).WaitFor(phoenix);
+        if (traceDestination == TraceDestination.Phoenix)
+        {
+            // In publish mode this ordinary container resource becomes an internal, ephemeral
+            // Azure Container App. That is intentional for this sample's self-contained demo
+            // tracing path; AX remains the durable published default.
+            var phoenix = builder.AddArize("arize");
+            application.ProductsApi.WithReference(phoenix).WaitFor(phoenix);
+            application.WorkflowServer.WithReference(phoenix).WaitFor(phoenix);
+            application.ShopSite.WithReference(phoenix).WaitFor(phoenix);
+        }
+    }
+
+    internal enum TraceDestination
+    {
+        Aspire,
+        Phoenix,
+        Ax,
     }
 
     private static void ConfigureAzureDependencies(

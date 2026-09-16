@@ -48,33 +48,46 @@ Copy the environment template and fill in the Azure and application values:
 cp .secrets.env.example .secrets.env
 ```
 
-The `just` deployment recipes source `.secrets.env` and run Aspire non-interactively. All required values must be present in that file or exported by the calling shell. See [Troubleshooting](#troubleshooting) for how Aspire caches resolved deployment values.
+The `just` deployment recipes source `.secrets.env` and run Aspire non-interactively. The table
+below distinguishes required values from optional settings and automation-owned values. Values may
+also be exported by the calling shell. See [Troubleshooting](#troubleshooting) for how Aspire
+caches resolved deployment values.
 
-Collect the following values before running Step 3:
+Collect the following values before running Step 3. Configuration uses `__` in environment-variable
+form (`Parameters__openai_api_key`), not the `:` form used in .NET configuration
+(`Parameters:openai-api-key`).
 
-| Parameter | Where to find it |
-|---|---|
-| `openai-api-key` | OpenAI dashboard → API keys |
-| `ARIZE_OTLP_ENDPOINT` | The regional OTLP endpoint shown by the Arize AX connect page; no region is assumed by the application |
-| `ARIZE_API_KEY` | Arize AX → Settings → API Keys; use a scoped service key |
-| `ARIZE_SPACE_ID` | The base64 space ID used for OTLP ingestion, not the human-readable space name |
-| `redis-password` | Generate once with `openssl rand -hex 24`; keep it stable across deploys |
-| `stripe-api-key` | Stripe Dashboard → Developers → API keys → Secret key |
-| `stripe-public-key` | Stripe Dashboard → Developers → API keys → Publishable key |
-| `temporal-address` | Temporal Cloud → Namespace → gRPC endpoint (e.g. `your-ns.tmprl.cloud:7233`) |
-| `temporal-namespace` | Temporal Cloud → Namespace name (e.g. `your-ns.acct`) |
-| `temporal-api-key` | Temporal Cloud → API keys |
+| Environment variable | Required when | Where to find it or default |
+|---|---|---|
+| `Azure__SubscriptionId` | Always | Azure subscription ID; must match the active Azure CLI subscription. |
+| `Azure__ResourceGroup` | Always | Target resource group name. |
+| `Azure__Location` | Always | Azure region, for example `eastus`. |
+| `Azure__TenantId` | Optional | When supplied, must match the active Azure CLI tenant. |
+| `Parameters__openai_api_key` | Always | OpenAI dashboard → API keys. |
+| `Parameters__redis_password` | Always | Generate once with `openssl rand -hex 24`; keep it stable across deploys. |
+| `Parameters__stripe_api_key` | Always | Stripe Dashboard → Developers → API keys → Secret key. |
+| `Parameters__stripe_public_key` | Always | Stripe Dashboard → Developers → API keys → Publishable key. |
+| `Parameters__temporal_address` | Always | Temporal Cloud → Namespace → gRPC endpoint, for example `your-ns.tmprl.cloud:7233`. |
+| `Parameters__temporal_namespace` | Always | Temporal Cloud → Namespace name, for example `your-ns.acct`. |
+| `Parameters__temporal_api_key` | Always | Temporal Cloud → API keys. |
+| `ARIZE_OTLP_ENDPOINT`, `ARIZE_API_KEY`, `ARIZE_SPACE_ID` | `Trace__Destination` is absent or `Ax` | The Arize AX connect page. Published applications default to `Ax`; set `Trace__Destination=Aspire` to use the managed Aspire dashboard instead. |
+| `Parameters__stripe_webhook_secret` | Never manually | Automation seeds a bootstrap value, then creates and records the real Stripe Event Destination secret. |
+| `Trace__Destination` | Optional | `Ax` in a published app; accepted values are `Aspire`, `Phoenix`, and `Ax`. `just deploy --trace-destination Phoenix` deploys an internal, ephemeral Phoenix Container App for this sample; its UI is not publicly exposed. `just deploy --trace-destination Aspire` uses the managed Aspire dashboard instead. |
+| `Trace__AiOnly` | Optional | `true`; applies only to AX/Phoenix and exports the connected AI trajectory rather than all trace spans. `just deploy --all-traces` sets it to `false` for one deployment. |
+| `Telemetry__CaptureAiContent` | Optional | `false`; `just deploy --capture` explicitly sets it to `true` for that invocation. |
 
-> **Note:** `aspire secret set` stores values in the AppHost's local dev user secrets, which `aspire run` reads and `aspire deploy` does not. Deployment values come from `.secrets.env`.
+> **Note:** Deployment values come from `.secrets.env` or the calling environment. AppHost user
+> secrets are not a deployment input.
 
 The Stripe webhook signing secret is intentionally not an input. `just deploy` seeds its temporary
 bootstrap value, creates the Stripe Event Destination after Azure assigns the shopSite URL, and
 records the generated signing secret automatically.
 
 Published applications default to Arize AX for traces. The AX resource is external and excluded
-from the deployment manifest; its endpoint, API key, and space ID remain deferred deployment
-parameters. Logs and metrics continue to use Aspire's OTLP configuration, and AX headers are
-attached only to the AX trace exporter.
+from the deployment manifest; its endpoint, API key, and space ID are required only while AX is
+the selected destination. Logs and metrics continue to use Aspire's OTLP configuration, and AX
+headers are attached only to the AX trace exporter. `Trace__AiOnly=true` is the default: AX receives
+the connected chat trajectory while the Aspire dashboard continues to receive logs and metrics.
 
 The sample's committed telemetry identity key is used in Azure as well as local environments. It
 keeps raw user and session identifiers out of traces and preserves demo grouping, but it is public
@@ -124,6 +137,15 @@ just deploy
 
 # Explicit opt-in to include AI inputs, outputs, system instructions, and tool payloads in telemetry
 just deploy --capture
+
+# Override the published AX default and export traces to the managed Aspire dashboard
+just deploy --trace-destination Aspire
+
+# Deploy an internal, ephemeral Phoenix trace backend for this sample
+just deploy --trace-destination Phoenix
+
+# Send all AX/Phoenix trace spans; this does not capture AI payload content
+just deploy --all-traces
 ```
 
 Before deploying, the recipe verifies that the active Azure CLI subscription and tenant match `.secrets.env`. It fails before provisioning if they do not match. The required Azure targeting values are:

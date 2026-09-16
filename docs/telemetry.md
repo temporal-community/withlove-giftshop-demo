@@ -50,23 +50,27 @@ The Aspire integration exposes two explicit backends:
 - `AddArizeAx` models AX as an external parameter-backed resource. Consumers reference it but do
   not `WaitFor` it because AX is not an AppHost-managed process.
 
-Phoenix uses the container filesystem by default and does not attach persistent storage. An
-AppHost can explicitly opt in when persistence is wanted:
+Phoenix uses the container filesystem by default and does not attach persistent storage. Locally it
+is available through the AppHost dashboard; when selected for Azure it is deployed as an internal
+Container App and its UI is not publicly exposed. That transient, internal setup is intentional and
+supported for this sample application. An AppHost can explicitly opt in to persistence when needed:
 
 ```csharp
 var arize = builder.AddArize("arize")
     .WithVolume("arize-data", PhoenixResource.DataMountPath);
 ```
 
-The AppHost reads `Arize:TraceDestination`. Local runs default to `Phoenix`; publish mode defaults
-to `Ax`. To use AX locally, store the values in the AppHost's secret store and select it when the
-AppHost starts:
+The AppHost reads `Trace:Destination`. Local runs default to `Phoenix`; publish mode defaults
+to `Ax`. Set it to `Aspire`, `Phoenix`, or `Ax`. Choosing Phoenix during Azure deployment creates
+the same ephemeral Phoenix container in the Container Apps environment and routes service traces to
+its internal endpoint. To use AX locally, store the values in the AppHost's secret store and select
+it when the AppHost starts:
 
 ```bash
 aspire secret set ARIZE_OTLP_ENDPOINT "<endpoint-from-the-AX-connect-page>"
 aspire secret set ARIZE_API_KEY "<your-AX-api-key>"
 aspire secret set ARIZE_SPACE_ID "<your-AX-space-id>"
-Arize__TraceDestination=Ax aspire start
+Trace__Destination=Ax aspire start
 ```
 
 The root `justfile` exposes the same backend choice with content capture disabled by default. The
@@ -75,12 +79,28 @@ The root `justfile` exposes the same backend choice with content capture disable
 ```bash
 just run-phoenix
 just run-phoenix --capture
+just run-phoenix --all-traces
 just run-ax
 just run-ax --capture
+just run-ax --all-traces
+
+# Send all traces to the Aspire dashboard
+just run-aspire
 
 # Azure deployment with AI payload capture explicitly enabled
 just deploy --capture
+
+# Azure deployment with Aspire traces instead of the published AX default
+just deploy --trace-destination Aspire
+
+# Azure deployment that sends all AX/Phoenix traces rather than only the AI trajectory
+just deploy --all-traces
 ```
+
+`--all-traces` sets `Trace__AiOnly=false`; it does not enable payload capture. Combine it with
+`--capture` only when both broader span export and AI payload content are appropriate. The local
+destination recipes are `just run-phoenix`, `just run-ax`, and `just run-aspire`; deployment uses
+`--trace-destination <Aspire|Phoenix|Ax>` to override its published `Ax` default.
 
 Captured prompts, responses, system instructions, and tool payloads can contain customer or
 business-sensitive data. ProductsAPI is explicitly forced to capture-disabled even when the flag is
@@ -93,12 +113,19 @@ No collector region is assumed. `ARIZE_OTLP_ENDPOINT` must be the endpoint suppl
 space. OTLP/HTTP is the default protocol; an endpoint ending in `/v1` is normalized to the
 signal-specific `/v1/traces` path.
 
-ServiceDefaults never registers two trace exporters. Phoenix and AX are mutually exclusive. When
-either Arize backend is referenced, it receives traces while `OTEL_EXPORTER_OTLP_ENDPOINT` still
-carries logs and metrics to Aspire. Without an Arize backend, the Aspire endpoint receives all
-three signals. With no endpoint, no telemetry is exported and a startup warning explains the
-missing trace destination. AX authentication headers are configured only on the named AX trace
-exporter, so they cannot leak to Aspire's logs or metrics exporters.
+ServiceDefaults registers one trace exporter. `Trace:Destination` selects Aspire, Phoenix, or AX;
+the two Arize backends are mutually exclusive. When either Arize backend is referenced, it receives
+the connected AI trajectory by default (`Trace:AiOnly=true`) while
+`OTEL_EXPORTER_OTLP_ENDPOINT` still carries logs and metrics to Aspire. Set `Trace:AiOnly=false`
+to send all traces to the selected Arize backend. The Aspire destination always receives all three
+signals. With no endpoint, no telemetry is exported and a startup warning explains the missing
+trace destination. AX authentication headers are configured only on the named AX trace exporter,
+so they cannot leak to Aspire's logs or metrics exporters.
+
+The AI-only trajectory preserves the spans Phoenix and AX need to reconstruct a usable chat turn:
+the `CHAIN` `chat.turn` root, an emitted `durable.turn` bridge, LLM chat spans, `TOOL` spans, and
+`RETRIEVER` spans. It intentionally excludes unrelated ASP.NET Core, HTTP client, EF Core, and
+standalone embedding spans. The filter is not used for the Aspire destination.
 
 All three services use `openinference.project.name=withlove-giftshop`. Their distinct
 `service.name` values remain intact for filtering inside that project.

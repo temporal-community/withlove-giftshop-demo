@@ -9,25 +9,48 @@ namespace WithLove.Telemetry.Tests;
 public class AppHostTelemetryModelTests
 {
     [Theory]
-    [InlineData(null, false, false)]
-    [InlineData(null, true, true)]
-    [InlineData("Phoenix", true, false)]
-    [InlineData("Ax", false, true)]
-    [InlineData("ax", false, true)]
+    [InlineData(null, false, "Phoenix")]
+    [InlineData(null, true, "Ax")]
+    [InlineData("Phoenix", true, "Phoenix")]
+    [InlineData("Ax", false, "Ax")]
+    [InlineData("ax", false, "Ax")]
+    [InlineData("Aspire", false, "Aspire")]
     public void TraceDestination_DefaultsByExecutionModeAndHonorsExplicitSelection(
         string? configuredDestination,
         bool isPublishMode,
-        bool expectedUseAx) =>
-        WithLoveApplicationExtensions.ResolveUseAxTraceDestination(configuredDestination, isPublishMode)
-            .Should().Be(expectedUseAx);
+        string expectedDestination) =>
+        WithLoveApplicationExtensions.ResolveTraceDestination(configuredDestination, isPublishMode)
+            .ToString().Should().Be(expectedDestination);
 
     [Fact]
     public void TraceDestination_RejectsUnknownSelection()
     {
-        var action = () => WithLoveApplicationExtensions.ResolveUseAxTraceDestination("both", false);
+        var action = () => WithLoveApplicationExtensions.ResolveTraceDestination("both", false);
 
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Arize:TraceDestination*Ax*Phoenix*");
+            .WithMessage("*Trace:Destination*Aspire*Ax*Phoenix*");
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("true", true)]
+    [InlineData("FALSE", false)]
+    public void AiOnlyTrace_DefaultsOnAndAcceptsOnlyBooleanValues(
+        string? configuredValue,
+        bool expected) =>
+        WithLoveApplicationExtensions.ResolveAiOnlyTrace(configuredValue)
+            .Should().Be(expected);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("yes")]
+    [InlineData(" true ")]
+    public void AiOnlyTrace_RejectsMalformedValues(string configuredValue)
+    {
+        var action = () => WithLoveApplicationExtensions.ResolveAiOnlyTrace(configuredValue);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Trace:AiOnly*true*false*");
     }
 
     [Theory]
@@ -97,13 +120,16 @@ public class AppHostTelemetryModelTests
         AssertCaptureEnvironment(products, expectedCapture: false);
         AssertCaptureEnvironment(worker, expectedCapture: false);
         AssertCaptureEnvironment(web, expectedCapture: false);
+        AssertAiOnlyTraceEnvironment(products, expectedAiOnly: true);
+        AssertAiOnlyTraceEnvironment(worker, expectedAiOnly: true);
+        AssertAiOnlyTraceEnvironment(web, expectedAiOnly: true);
     }
 
     [Fact]
     public async Task LocalFullApp_WithAxSelection_WiresEveryServiceToAxWithoutPhoenixOrReadinessWait()
     {
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
-            args: ["--Arize:TraceDestination=Ax"]);
+            args: ["--Trace:Destination=Ax"]);
         await using var app = await builder.BuildAsync();
         var model = app.Services.GetRequiredService<DistributedApplicationModel>();
         var ax = model.Resources.OfType<ArizeAxResource>().Should().ContainSingle(resource => resource.Name == "arize-ax").Subject;
@@ -124,6 +150,25 @@ public class AppHostTelemetryModelTests
             service.Annotations.OfType<ResourceRelationshipAnnotation>().Should().NotContain(relationship =>
                 ReferenceEquals(relationship.Resource, ax)
                 && relationship.Type.Contains("Wait", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public async Task LocalFullApp_WithAspireSelection_WiresNoArizeTraceDestination()
+    {
+        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
+            args: ["--Trace:Destination=Aspire"]);
+        await using var app = await builder.BuildAsync();
+        var model = app.Services.GetRequiredService<DistributedApplicationModel>();
+
+        model.Resources.Should().NotContain(resource => resource is PhoenixResource);
+        model.Resources.Should().NotContain(resource => resource is ArizeAxResource);
+        foreach (var service in model.Resources.OfType<ProjectResource>())
+        {
+            var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
+            environment.Should().NotContainKey("Phoenix__OtlpTracesEndpoint");
+            environment.Should().NotContainKey("Arize__Tracing__Ax__Endpoint");
+            AssertAiOnlyTraceEnvironment(environment, expectedAiOnly: true);
         }
     }
 
@@ -181,6 +226,21 @@ public class AppHostTelemetryModelTests
         }
     }
 
+    [Fact]
+    public async Task AiOnlyTraceOptOut_PropagatesToEveryService()
+    {
+        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
+            args: ["Trace:AiOnly=false"]);
+        await using var app = await builder.BuildAsync();
+        var model = app.Services.GetRequiredService<DistributedApplicationModel>();
+
+        foreach (var service in model.Resources.OfType<ProjectResource>())
+        {
+            var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
+            AssertAiOnlyTraceEnvironment(environment, expectedAiOnly: false);
+        }
+    }
+
     private static async Task<Dictionary<string, object>> ResolveEnvironmentAsync(
         IResource resource,
         DistributedApplicationExecutionContext executionContext)
@@ -216,4 +276,9 @@ public class AppHostTelemetryModelTests
         environment[applicationSetting].Should().Be(expected);
         environment.Should().NotContainKey(standardSetting);
     }
+
+    private static void AssertAiOnlyTraceEnvironment(
+        IReadOnlyDictionary<string, object> environment,
+        bool expectedAiOnly) =>
+        environment["Trace__AiOnly"].Should().Be(expectedAiOnly ? "true" : "false");
 }

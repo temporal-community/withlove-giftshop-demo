@@ -29,6 +29,7 @@ public static class Extensions
     internal const string AxApiKeyConfigurationKey = "Arize:Tracing:Ax:ApiKey";
     internal const string AxSpaceIdConfigurationKey = "Arize:Tracing:Ax:SpaceId";
     internal const string AxProtocolConfigurationKey = "Arize:Tracing:Ax:Protocol";
+    internal const string AiOnlyTraceConfigurationKey = "Trace:AiOnly";
     internal const string AspireOtlpEndpointConfigurationKey = "OTEL_EXPORTER_OTLP_ENDPOINT";
     internal const string OpenInferenceProjectNameConfigurationKey = "OpenInference:ProjectName";
     private const string OtlpServiceNameConfigurationKey = "OTEL_SERVICE_NAME";
@@ -114,6 +115,9 @@ public static class Extensions
                     .AddHttpClientInstrumentation();
 
                 configureTracing?.Invoke(tracing);
+
+                if (routing.ExportAiOnly && routing.TraceDestination is TraceExportDestination.Phoenix or TraceExportDestination.Ax)
+                    tracing.AddProcessor(new AiOnlyTraceExportProcessor());
 
                 if (routing.TraceDestination == TraceExportDestination.Aspire)
                 {
@@ -283,6 +287,7 @@ internal sealed record TelemetryExportRouting(
     TraceExportDestination TraceDestination,
     bool ExportLogsToAspire,
     bool ExportMetricsToAspire,
+    bool ExportAiOnly,
     Uri? PhoenixEndpoint,
     AxExporterConfiguration? Ax)
 {
@@ -292,6 +297,7 @@ internal sealed record TelemetryExportRouting(
         var aspire = GetOptionalHttpEndpoint(configuration, Extensions.AspireOtlpEndpointConfigurationKey);
         var phoenix = GetOptionalHttpEndpoint(configuration, Extensions.PhoenixOtlpTracesEndpointConfigurationKey);
         var ax = GetOptionalAxExporterConfiguration(configuration);
+        var aiOnly = GetAiOnlyTraceConfiguration(configuration);
 
         if (phoenix is not null && ax is not null)
         {
@@ -309,8 +315,21 @@ internal sealed record TelemetryExportRouting(
                 : aspire is not null ? TraceExportDestination.Aspire : TraceExportDestination.None,
             ExportLogsToAspire: aspire is not null,
             ExportMetricsToAspire: aspire is not null,
+            ExportAiOnly: aiOnly,
             PhoenixEndpoint: phoenix,
             Ax: ax);
+    }
+
+    private static bool GetAiOnlyTraceConfiguration(IConfiguration configuration)
+    {
+        var value = configuration[Extensions.AiOnlyTraceConfigurationKey];
+        if (value is null || value.Equals("true", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (value.Equals("false", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        throw new InvalidOperationException(
+            $"Configuration '{Extensions.AiOnlyTraceConfigurationKey}' must be 'true' or 'false'.");
     }
 
     private static Uri? GetOptionalHttpEndpoint(IConfiguration configuration, string key)
