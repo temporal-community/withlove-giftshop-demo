@@ -47,22 +47,22 @@ run capture="false" all_traces="false": (run-phoenix capture all_traces)
 [arg("all_traces", long="all-traces", value="true")]
 [env("Trace__Destination", "Phoenix")]
 run-phoenix $Telemetry__CaptureAiContent="false" all_traces="false":
-    if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
-    aspire start --apphost {{ apphost }}
+    @if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
+    @aspire start --apphost {{ apphost }}
 
 # Start with AX; pass --capture to export AI payload content or --all-traces to disable AI-only filtering
 [arg("Telemetry__CaptureAiContent", long="capture", value="true")]
 [arg("all_traces", long="all-traces", value="true")]
 [env("Trace__Destination", "Ax")]
 run-ax $Telemetry__CaptureAiContent="false" all_traces="false":
-    if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
-    aspire start --apphost {{ apphost }}
+    @if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
+    @aspire start --apphost {{ apphost }}
 
 # Start with the Aspire dashboard as the trace destination; pass --capture to export AI payload content
 [arg("Telemetry__CaptureAiContent", long="capture", value="true")]
 [env("Trace__Destination", "Aspire")]
 run-aspire $Telemetry__CaptureAiContent="false":
-    aspire start --apphost {{ apphost }}
+    @aspire start --apphost {{ apphost }}
 
 # Purge soft-deleted Key Vaults that were created by this AppHost environment.
 # Key Vault names remain reserved after a normal delete, so this is required before
