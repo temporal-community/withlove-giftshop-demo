@@ -93,7 +93,7 @@ just deploy --capture
 # Azure deployment with Aspire traces instead of the published AX default
 just deploy --trace-destination Aspire
 
-# Azure deployment that sends all AX/Phoenix traces rather than only the AI trajectory
+# Azure deployment: default AX sends all trace spans rather than only the AI trajectory
 just deploy --all-traces
 ```
 

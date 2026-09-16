@@ -213,7 +213,7 @@ write-stripe-webhook-secret:
 # Requires .secrets.env in the repo root — copy .secrets.env.example and fill in your values.
 #   just deploy                      # deploy to azureprod (uses cached state)
 #   just deploy --capture            # deploy and capture AI payload content in telemetry
-#   just deploy --all-traces         # deploy and export all AX/Phoenix trace spans
+#   just deploy --all-traces         # default AX: export all trace spans rather than AI-only trajectory
 #   just deploy --trace-destination Aspire   # deploy with Aspire as the trace destination
 #   just deploy --trace-destination Phoenix  # deploy internal, ephemeral Phoenix for this sample
 #   just deploy staging              # deploy to a different environment
@@ -445,7 +445,7 @@ deploy environment="azureprod" reset_state="false" capture="false" all_traces="f
 # Use this after changing Azure__Location, Azure__ResourceGroup, or similar infra-level settings.
 #   just deploy-clean           # deploy to azureprod with fresh state
 #   just deploy-clean --capture # deploy with fresh state and capture AI payload content
-#   just deploy-clean --all-traces # deploy with fresh state and all AX/Phoenix trace spans
+#   just deploy-clean --all-traces # fresh state; default AX exports all trace spans
 #   just deploy-clean staging   # deploy to staging with fresh state
 [arg("capture", long="capture", value="true")]
 [arg("all_traces", long="all-traces", value="true")]

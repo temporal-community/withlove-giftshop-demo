@@ -144,7 +144,7 @@ just deploy --trace-destination Aspire
 # Deploy an internal, ephemeral Phoenix trace backend for this sample
 just deploy --trace-destination Phoenix
 
-# Send all AX/Phoenix trace spans; this does not capture AI payload content
+# Default AX: send all trace spans rather than only the AI trajectory; this does not capture payload content
 just deploy --all-traces
 ```
 
@@ -284,27 +284,6 @@ sync.
 
 ## Troubleshooting
 
-### Aspire dashboard authentication failure
-
-The managed dashboard can return `Could not authenticate user with requested resource.` even when
-your Azure CLI and the portal work normally against the same subscription.
-
-The usual cause is a stale browser session, not a missing role. The dashboard's Entra authorize
-endpoint is pinned to the tenant rather than `/common`, so it presents no account picker and
-silently reuses whatever session the browser already holds. If that session belongs to a second
-identity without role assignments on the subscription, the dashboard fails while every ARM call you
-make as your privileged account keeps succeeding — which is what makes it look like a deployment
-problem.
-
-The remedy is client-side: open the dashboard in a clean private/incognito window and sign in
-explicitly as the account that owns the subscription. Nothing in the deployment or its Bicep needs
-to change.
-
-A separate, genuinely different cause produces the same message: when dashboard access is granted
-through an Entra group, group-membership propagation can lag. Microsoft documents that case in the
-[Azure Container Apps Aspire dashboard guide](https://learn.microsoft.com/azure/container-apps/aspire-dashboard).
-Rule out the stale session first — it is the one this project has actually hit.
-
 ### Deployment parameter cache
 
 Aspire manages deployment parameter state separately from `aspire secret set` and caches resolved
@@ -313,21 +292,3 @@ cache. `just deploy` removes this AppHost's file when the configured subscriptio
 resource group changes, then deploys normally so Aspire can save replacement state.
 `just deploy-clean` forces the same reset. The recipes deliberately avoid `--clear-cache`, which
 ignores the cache *and* prevents Aspire from saving replacement state.
-
-### Azure SQL identity provisioning
-
-Aspire 13.5 fixes the earlier Azure SQL role script that could fail in `Invoke-Sqlcmd` with a `Microsoft.Extensions.Caching.Memory` `MissingMethodException`. The application still uses one shared managed identity for three Container Apps, and that shared-identity role-module case has not been verified as safe with the default Aspire model.
-
-The AppHost therefore continues to disable the default SQL role assignments and deploy one repository-owned `sql-identity-access` Bicep resource instead. It acquires an Azure SQL token, uses the in-box `System.Data.SqlClient`, reconciles the shared identity's database user by SID, and grants `db_owner` idempotently. Remove this workaround only after verifying through published artifacts and a disposable Azure deployment that the default model emits one safe role-provisioning path for the shared identity.
-
-### Publish and deploy are separate pipelines
-
-`aspire publish` and `aspire deploy` build different step graphs. Publish contains `publish-prereq`;
-deploy contains `deploy-prereq`. A custom pipeline step anchored with `requiredBy` to a step that
-does not exist in the graph being run is **silently omitted** — no warning, no error, and the
-deployment proceeds without it.
-
-This matters for any AppHost step that guards a parameter or gates provisioning: a step verified
-only against `aspire publish --list-steps` can be absent from the deploy path that actually writes
-to Key Vault. Register such steps against both anchors, and confirm with `just deploy-preview`
-that the step appears in the deploy graph — not only in the publish graph.
