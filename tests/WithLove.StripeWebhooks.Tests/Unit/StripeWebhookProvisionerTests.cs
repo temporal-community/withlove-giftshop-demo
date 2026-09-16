@@ -1,5 +1,3 @@
-using System.IO;
-using System.Net.Http;
 using Stripe;
 
 // Stripe.File is a webhook-unrelated API resource; every File in this file means System.IO.File.

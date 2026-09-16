@@ -1,8 +1,6 @@
 using Aspire.Hosting.Azure;
 using Aspire.Hosting.Pipelines;
-using Aspire.Hosting;
 using Azure.Provisioning.KeyVault;
-using Microsoft.Extensions.Configuration;
 using TemporalCommunity.Aspire.Hosting;
 using Temporalio.Common;
 

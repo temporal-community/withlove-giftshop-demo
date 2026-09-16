@@ -10,7 +10,6 @@ using OpenTelemetry;
 using OpenTelemetry.Trace;
 using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
-using Temporalio.Client;
 using WithLove.OpenInference;
 using WithLove.OpenInference.Spans;
 using WithLove.Web.Telemetry;

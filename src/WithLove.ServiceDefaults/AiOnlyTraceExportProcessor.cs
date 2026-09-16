@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using OpenTelemetry;
-using OpenTelemetry.Trace;
 using WithLove.OpenInference;
 
 namespace Microsoft.Extensions.Hosting;

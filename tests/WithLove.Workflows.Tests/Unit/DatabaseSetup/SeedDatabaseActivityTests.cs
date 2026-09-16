@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Stripe;
 using System.Net;
-using System.Net.Http;
 using WithLove.Data;
 using WithLove.Workflows.Activities;
 

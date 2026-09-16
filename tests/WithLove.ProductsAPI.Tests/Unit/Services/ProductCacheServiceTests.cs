@@ -9,7 +9,6 @@ using WithLove.Data;
 using WithLove.Data.Models;
 using WithLove.ProductsAPI.Services;
 using WithLove.OpenInference;
-using WithLove.OpenInference.Spans;
 using ZiggyCreatures.Caching.Fusion;
 
 /// <summary>

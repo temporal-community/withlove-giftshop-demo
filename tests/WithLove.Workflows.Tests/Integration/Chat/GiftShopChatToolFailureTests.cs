@@ -1,10 +1,7 @@
-using System.Collections.Concurrent;
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Temporalio.Api.Enums.V1;
-using Temporalio.Client;
 using Temporalio.Common;
 using TemporalCommunity.Extensions.AI;
 

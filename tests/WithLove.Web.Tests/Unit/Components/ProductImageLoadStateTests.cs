@@ -1,4 +1,3 @@
-using FluentAssertions;
 using WithLove.Web.Components.Shared;
 
 namespace WithLove.Web.Tests.Unit.Components;

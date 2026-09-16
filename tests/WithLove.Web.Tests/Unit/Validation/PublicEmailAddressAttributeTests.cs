@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using FluentAssertions;
 using WithLove.Web.Validation;
 
 namespace WithLove.Web.Tests.Unit.Validation;

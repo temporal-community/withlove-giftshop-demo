@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.AI;
 using TemporalCommunity.Extensions.AI;
 using Temporalio.Api.Common.V1;

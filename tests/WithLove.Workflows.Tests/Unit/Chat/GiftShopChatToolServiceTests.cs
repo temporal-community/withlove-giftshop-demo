@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using FakeItEasy;
 using WithLove.Workflows.Activities;
 
 namespace WithLove.Workflows.Tests.Unit.Chat;

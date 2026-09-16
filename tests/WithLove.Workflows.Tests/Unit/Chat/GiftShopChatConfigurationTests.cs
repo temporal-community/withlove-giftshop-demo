@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.Extensions.AI;
 using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
-using WithLove.Workflows.Loyalty;
 
 namespace WithLove.Workflows.Tests.Unit.Chat;
 

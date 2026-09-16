@@ -1,8 +1,6 @@
 using Azure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 using WithLove.Data;

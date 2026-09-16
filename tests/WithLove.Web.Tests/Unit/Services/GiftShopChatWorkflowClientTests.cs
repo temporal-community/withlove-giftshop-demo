@@ -4,7 +4,6 @@ using TemporalCommunity.Extensions.AI.Exceptions;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
 using Temporalio.Client.Interceptors;
-using TemporalCommunity.Extensions.AI.Session;
 using WithLove.Workflows;
 using WithLove.Workflows.Chat;
 using WithLove.Workflows.Workflows;

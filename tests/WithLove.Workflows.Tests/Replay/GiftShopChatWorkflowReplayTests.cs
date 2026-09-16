@@ -1,7 +1,6 @@
 using System.Text.Json;
 using TemporalCommunity.Extensions.AI;
 using Temporalio.Common;
-using Temporalio.Worker;
 
 namespace WithLove.Workflows.Tests.Replay;
 

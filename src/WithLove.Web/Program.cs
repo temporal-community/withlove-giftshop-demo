@@ -2,7 +2,6 @@ using Azure.Identity;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;

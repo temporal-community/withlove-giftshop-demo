@@ -1,10 +1,7 @@
-using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using WithLove.Web.Components.Shared;
-using WithLove.Web.Models;
 
 namespace WithLove.Web.Tests.Unit.Components;
 

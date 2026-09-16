@@ -1,9 +1,7 @@
 using Microsoft.Extensions.AI;
 using TemporalCommunity.Extensions.AI;
 using Temporalio.Api.Enums.V1;
-using Temporalio.Client;
 using Temporalio.Exceptions;
-using WithLove.Workflows;
 using WebGiftShopChatWorkflowClient = WithLove.Web.Services.GiftShopChatWorkflowClient;
 
 namespace WithLove.Workflows.Tests.Integration.Chat;

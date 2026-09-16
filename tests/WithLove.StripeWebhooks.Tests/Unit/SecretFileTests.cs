@@ -1,5 +1,3 @@
-using System.IO;
-
 namespace WithLove.StripeWebhooks.Tests.Unit;
 
 /// <summary>
