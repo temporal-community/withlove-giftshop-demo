@@ -11,6 +11,7 @@
         <InternalsVisibleTo Include="WithLove.ProductsAPI.Tests" />
         <InternalsVisibleTo Include="WithLove.Web.Tests" />
         <InternalsVisibleTo Include="WithLove.Telemetry.Tests" />
+        <InternalsVisibleTo Include="WithLove.Workflows.Tests" />
     </ItemGroup>
 
     <ItemGroup>

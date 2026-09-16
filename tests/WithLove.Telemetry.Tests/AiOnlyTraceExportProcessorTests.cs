@@ -9,7 +9,7 @@ namespace WithLove.Telemetry.Tests;
 public class AiOnlyTraceExportProcessorTests
 {
     [Fact]
-    public void ExportPipeline_KeepsTheConnectedAiSpineAndDropsUnrelatedActivities()
+    public void ExportPipeline_KeepsClassifiedAiActivitiesAndDropsUnrelatedActivities()
     {
         const string sourceName = "WithLove.AiOnlyTraceExportProcessorTests";
         using var source = new ActivitySource(sourceName);
@@ -17,8 +17,7 @@ public class AiOnlyTraceExportProcessorTests
         using var provider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
             .SetSampler(new AlwaysOnSampler())
-            .AddProcessor(new AiOnlyTraceExportProcessor())
-            .AddProcessor(new SimpleActivityExportProcessor(exporter))
+            .AddProcessor(new AiOnlyTraceExportProcessor(exporter))
             .Build();
 
         using (var chain = source.StartActivity("chat.turn", ActivityKind.Internal))
@@ -43,6 +42,7 @@ public class AiOnlyTraceExportProcessorTests
         using (var embeddings = source.StartActivity("openai.embeddings"))
             embeddings!.SetTag("gen_ai.operation.name", "embeddings");
 
+        provider.ForceFlush().Should().BeTrue();
         exporter.ExportedOperationNames.Should().BeEquivalentTo(
         [
             "chat.turn",

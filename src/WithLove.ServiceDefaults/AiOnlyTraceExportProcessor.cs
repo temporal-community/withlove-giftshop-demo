@@ -1,14 +1,15 @@
 using System.Diagnostics;
 using OpenTelemetry;
+using OpenTelemetry.Trace;
 using WithLove.OpenInference;
 
 namespace Microsoft.Extensions.Hosting;
 
 /// <summary>
-/// Removes non-AI Activities before the active Arize exporter runs while retaining the connected
-/// chat trajectory needed by OpenInference viewers.
+/// Exports only application-classified AI activities without changing trace sampling decisions.
 /// </summary>
-internal sealed class AiOnlyTraceExportProcessor : BaseProcessor<Activity>
+internal sealed class AiOnlyTraceExportProcessor(BaseExporter<Activity> exporter)
+    : BatchActivityExportProcessor(exporter)
 {
     private const string GenAiOperationName = "gen_ai.operation.name";
     private const string ChatOperation = "chat";
@@ -23,8 +24,10 @@ internal sealed class AiOnlyTraceExportProcessor : BaseProcessor<Activity>
     {
         ArgumentNullException.ThrowIfNull(activity);
 
-        if (!IsAiTrajectoryActivity(activity))
-            activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
+        // Do not clear Recorded on rejected activities. Temporal propagates that sampling flag
+        // across durable boundaries, and later model/tool activities would never be recorded.
+        if (IsAiTrajectoryActivity(activity))
+            base.OnEnd(activity);
     }
 
     internal static bool IsAiTrajectoryActivity(Activity activity)

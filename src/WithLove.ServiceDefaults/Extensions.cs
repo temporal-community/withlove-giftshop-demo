@@ -116,16 +116,13 @@ public static class Extensions
 
                 configureTracing?.Invoke(tracing);
 
-                if (routing.ExportAiOnly && routing.TraceDestination is TraceExportDestination.Phoenix or TraceExportDestination.Ax)
-                    tracing.AddProcessor(new AiOnlyTraceExportProcessor());
-
                 if (routing.TraceDestination == TraceExportDestination.Aspire)
                 {
                     tracing.AddOtlpExporter();
                 }
                 else if (routing.TraceDestination == TraceExportDestination.Phoenix)
                 {
-                    tracing.AddOtlpExporter("phoenix", options =>
+                    AddArizeTraceExporter(tracing, "phoenix", routing.ExportAiOnly, options =>
                     {
                         options.Endpoint = routing.PhoenixEndpoint!;
                         options.Protocol = OtlpExportProtocol.HttpProtobuf;
@@ -134,7 +131,7 @@ public static class Extensions
                 }
                 else if (routing.TraceDestination == TraceExportDestination.Ax)
                 {
-                    tracing.AddOtlpExporter("arize-ax", options =>
+                    AddArizeTraceExporter(tracing, "arize-ax", routing.ExportAiOnly, options =>
                     {
                         options.Endpoint = routing.Ax!.Endpoint;
                         options.Protocol = routing.Ax.Protocol;
@@ -153,6 +150,23 @@ public static class Extensions
         }
 
         return openTelemetryBuilder;
+    }
+
+    private static void AddArizeTraceExporter(
+        TracerProviderBuilder tracing,
+        string name,
+        bool exportAiOnly,
+        Action<OtlpExporterOptions> configure)
+    {
+        if (!exportAiOnly)
+        {
+            tracing.AddOtlpExporter(name, configure);
+            return;
+        }
+
+        var options = new OtlpExporterOptions();
+        configure(options);
+        tracing.AddProcessor(new AiOnlyTraceExportProcessor(new OtlpTraceExporter(options)));
     }
 
     internal static void ConfigureAspNetCoreTracing(

@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using WithLove.OpenInference;
@@ -102,9 +103,12 @@ public class OtlpExporterIntegrationTests
         aspire.Requests.Should().NotContain(captured => captured.Path == "/v1/traces");
 
         host.Services.GetRequiredService<MeterProvider>().ForceFlush(5_000).Should().BeTrue();
+        host.Services.GetRequiredService<ILogger<OtlpExporterIntegrationTests>>()
+            .LogInformation("OTLP log routing sentinel");
         await host.StopAsync();
         await aspire.WaitForAsync("/v1/metrics");
-        await aspire.WaitForAsync("/v1/logs");
+        var logRequest = await aspire.WaitForAsync("/v1/logs");
+        Encoding.UTF8.GetString(logRequest.Body).Should().Contain("OTLP log routing sentinel");
 
         ax.Requests.Should().NotContain(captured =>
             captured.Path == "/v1/metrics" || captured.Path == "/v1/logs");
@@ -116,12 +120,16 @@ public class OtlpExporterIntegrationTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ExportedTrace_AiOnlyRetainsTheConnectedAiSpineForEachArizeDestination(bool usePhoenix)
+    public async Task ExportedTrace_AiOnlyRetainsClassifiedAiSpansForEachArizeDestination(bool usePhoenix)
     {
         await using var aspire = await OtlpTestServer.StartAsync();
         await using var arize = await OtlpTestServer.StartAsync();
-        var sourceName = $"WithLove.AiOnlyExport.{Guid.NewGuid():N}";
-        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { ApplicationName = sourceName });
+        var applicationName = $"WithLove.AiOnlyService.{Guid.NewGuid():N}";
+        var sourceName = $"WithLove.AiOnlySource.{Guid.NewGuid():N}";
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+        {
+            ApplicationName = applicationName,
+        });
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["OTEL_EXPORTER_OTLP_ENDPOINT"] = aspire.BaseUri.AbsoluteUri,
@@ -136,8 +144,10 @@ public class OtlpExporterIntegrationTests
             ["Arize:Tracing:Ax:ApiKey"] = usePhoenix ? null : "ax-api-key-sentinel",
             ["Arize:Tracing:Ax:SpaceId"] = usePhoenix ? null : "ax-space-id-sentinel",
             ["Trace:AiOnly"] = "true",
+            ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
-        builder.ConfigureOpenTelemetry();
+        builder.ConfigureOpenTelemetry(configureTracing: tracing => tracing.AddSource(sourceName));
+        builder.AddOpenInferenceDefaults();
         using var host = builder.Build();
         await host.StartAsync();
 
@@ -165,6 +175,8 @@ public class OtlpExporterIntegrationTests
         host.Services.GetRequiredService<TracerProvider>().ForceFlush(5_000).Should().BeTrue();
         var request = await arize.WaitForAsync("/v1/traces");
         var wireText = Encoding.UTF8.GetString(request.Body);
+        wireText.Should().Contain(applicationName);
+        wireText.Should().Contain("withlove-giftshop");
         wireText.Should().Contain("chat.turn");
         wireText.Should().Contain("durable.turn");
         wireText.Should().Contain("openai.chat");
