@@ -32,8 +32,8 @@ builder.AddOpenInferenceDefaults();
 builder.ConfigureOpenTelemetry(
     aspNetCoreTracing =>
     {
-        // Blazor Interactive Server emits a root span for nearly every SignalR hub call and
-        // component event. Keep normal HTTP request tracing, but exclude that high-volume UI noise.
+        // Do not create specialized SignalR/Razor component spans. ServiceDefaults excludes the
+        // generic Blazor transport requests while retaining normal application HTTP requests.
         aspNetCoreTracing.EnableAspNetCoreSignalRSupport = false;
         aspNetCoreTracing.EnableRazorComponentsSupport = false;
     },

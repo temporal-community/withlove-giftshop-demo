@@ -48,9 +48,15 @@ public class ProductCacheServiceTests
         };
     }
 
-    private ProductCacheService CreateService()
+    private ProductCacheService CreateService(OpenInferenceTraceConfig? traceConfig = null)
     {
-        return new ProductCacheService(_fakeDbContext, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation());
+        return new ProductCacheService(
+            _fakeDbContext,
+            _fakeCache,
+            _fakeLogger,
+            _fakeEmbeddingGenerator,
+            new Instrumentation(),
+            traceConfig ?? OpenInferenceTraceConfig.Disabled);
     }
 
     [Fact]
@@ -70,7 +76,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(null!, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation()));
+            new ProductCacheService(null!, _fakeCache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation(), OpenInferenceTraceConfig.Disabled));
     }
 
     [Fact]
@@ -80,7 +86,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(_fakeDbContext, null!, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation()));
+            new ProductCacheService(_fakeDbContext, null!, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation(), OpenInferenceTraceConfig.Disabled));
     }
 
     [Fact]
@@ -90,7 +96,7 @@ public class ProductCacheServiceTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ProductCacheService(_fakeDbContext, _fakeCache, null!, _fakeEmbeddingGenerator, new Instrumentation()));
+            new ProductCacheService(_fakeDbContext, _fakeCache, null!, _fakeEmbeddingGenerator, new Instrumentation(), OpenInferenceTraceConfig.Disabled));
     }
 
     [Fact]
@@ -326,6 +332,40 @@ public class ProductCacheServiceTests
             .Should().Be(OpenInferenceTraceConfig.RedactedValue);
         stopped[0].GetTagItem("retrieval.documents.0.document.content").Should().BeNull();
         stopped[0].GetTagItem("retrieval.documents.0.document.score").Should().BeNull();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Caching)]
+    public async Task SearchProductsAsync_CapturesRetrieverInputWhenContentCaptureIsEnabled()
+    {
+        var query = $"Visible-{Guid.NewGuid():N}";
+        var products = new List<Product>
+        {
+            new() { Id = 92, Name = query, Description = query, IsEnabled = true, RowVersion = [1] },
+        };
+        A.CallTo(() => _fakeDbContext.Products).Returns(products.BuildMockDbSet());
+        var stopped = new List<Activity>();
+        using var testScope = new Activity(nameof(SearchProductsAsync_CapturesRetrieverInputWhenContentCaptureIsEnabled)).Start();
+        var testTraceId = testScope.TraceId;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == Instrumentation.ActivitySourceName,
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (activity.TraceId == testTraceId)
+                    stopped.Add(activity);
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await CreateService(OpenInferenceTraceConfig.Enabled).SearchProductsAsync(query);
+
+        var retriever = stopped.Should().ContainSingle().Subject;
+        retriever.GetTagItem(OpenInferenceAttributes.InputValue).Should().Be(query);
+        retriever.GetTagItem("retrieval.documents.0.document.content").Should().BeNull();
     }
 
     [Fact]

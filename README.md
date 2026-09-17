@@ -35,7 +35,7 @@ Only traces switch between Arize backends. Logs and metrics continue to use the 
 in every local mode. Local runs default to the AppHost-managed Phoenix container; publish mode
 defaults to AX.
 
-The root `justfile` exposes all four supported local combinations:
+The root `justfile` exposes the supported local destination and payload-capture combinations:
 
 | Destination | AI payload content | Command |
 |---|---|---|
@@ -43,20 +43,15 @@ The root `justfile` exposes all four supported local combinations:
 | Aspire dashboard | Captured | `just run-aspire --capture` |
 | Phoenix | Redacted/omitted | `just run` or `just run-phoenix` |
 | Phoenix | Captured | `just run-phoenix --capture` |
-| Phoenix | All trace spans | `just run-phoenix --all-traces` |
 | Arize AX | Redacted/omitted | `just run-ax` |
 | Arize AX | Captured | `just run-ax --capture` |
-| Arize AX | All trace spans | `just run-ax --all-traces` |
 
-The `--capture` flag is an explicit opt-in. It permits the Web and WorkflowServer resources to
-export chat inputs and outputs, model messages and system instructions, and tool arguments and
-results. Product retrieval and embedding payloads remain hidden. Captured content can contain
-customer or business-sensitive data, and changing the flag affects only new telemetry; it does not
-redact or delete data already retained by Phoenix or AX.
-
-`--all-traces` is a separate diagnostic opt-out from AI-only filtering. It sets
-`Trace__AiOnly=false` for the run, so Phoenix or AX receives all trace spans. It does not capture
-AI payload content; combine it with `--capture` only when both are deliberately needed.
+The `--capture` flag is an explicit opt-in. It permits the Web, WorkflowServer, and ProductsAPI
+resources to export chat inputs and outputs, model messages and system instructions, tool arguments
+and results, and product-search queries. Embedding payloads remain hidden, and product retrieval
+records only returned product IDs. Captured content can contain customer or business-sensitive data,
+and changing the flag affects only new telemetry; it does not redact or delete data already retained
+by Phoenix or AX.
 
 Before using AX, store its connection values in the Aspire secret store. Use the endpoint and
 base64 space ID shown on the AX connect page; the sample does not assume an AX region.
@@ -89,7 +84,6 @@ Configuration keys use `:` in configuration and `__` in environment-variable for
 | Setting | Default | Effect |
 |---|---|---|
 | `Trace:Destination` / `Trace__Destination` | Phoenix locally; AX when published | Selects `Aspire`, `Phoenix`, or `Ax` as the sole trace destination. |
-| `Trace:AiOnly` / `Trace__AiOnly` | `true` | Sends only the connected AI trajectory to Phoenix or AX; Aspire always receives full traces. Set `false` only to send all selected-backend traces. |
 | `Telemetry:CaptureAiContent` / `Telemetry__CaptureAiContent` | `false` | Application-level authorization for sensitive AI payload export. This is what `--capture` sets. |
 
 `Telemetry:CaptureAiContent` is the only setting that can authorize AI payload capture. It defaults
@@ -112,7 +106,7 @@ following values are required for the standard Azure deployment:
 | Application | `Parameters__openai_api_key`, `Parameters__redis_password`, `Parameters__stripe_api_key`, `Parameters__stripe_public_key`, `Parameters__temporal_address`, `Parameters__temporal_namespace`, `Parameters__temporal_api_key` | `Parameters__stripe_webhook_secret` is automation-owned; do not supply it. |
 | Trace export | `ARIZE_OTLP_ENDPOINT`, `ARIZE_API_KEY`, `ARIZE_SPACE_ID` | Required by the published default, `Trace:Destination=Ax`. Choose `Trace__Destination=Aspire` to use the managed Aspire dashboard, or `Phoenix` to deploy an internal, ephemeral Phoenix instance for this demo; either selection omits AX credentials. |
 
-`Trace:AiOnly` defaults to `true`; `Telemetry:CaptureAiContent` defaults to `false`. The optional
+`Telemetry:CaptureAiContent` defaults to `false`. The optional
 `just deploy --capture` switch sets capture to `true` for that invocation. The complete setup,
 including Key Vault permissions for Stripe automation, is in [Azure deployment](docs/azure-deployment.md).
 

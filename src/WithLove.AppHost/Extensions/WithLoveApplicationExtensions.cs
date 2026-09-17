@@ -11,9 +11,7 @@ internal static partial class WithLoveApplicationExtensions
     private const string ProductsDatabaseResourceName = "productsDatabase";
     private const string OpenInferenceProjectName = "withlove-giftshop";
     private const string TraceDestinationConfigurationKey = "Trace:Destination";
-    private const string AiOnlyTraceConfigurationKey = "Trace:AiOnly";
     private const string CaptureAiContentConfigurationKey = "Telemetry:CaptureAiContent";
-    private const string AiOnlyTraceEnvironmentVariable = "Trace__AiOnly";
     private const string CaptureAiContentEnvironmentVariable = "Telemetry__CaptureAiContent";
     private const string AspireGenAiCaptureMessageContentEnvironmentVariable =
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
@@ -51,9 +49,6 @@ internal static partial class WithLoveApplicationExtensions
         var traceDestination = ResolveTraceDestination(
             builder.Configuration[TraceDestinationConfigurationKey],
             isPublishMode);
-        var aiOnlyTrace = ResolveAiOnlyTrace(builder.Configuration[AiOnlyTraceConfigurationKey]);
-        ConfigureAiOnlyTrace(application, aiOnlyTrace);
-
         if (isPublishMode)
         {
             ConfigureAzureDependencies(builder, application, infrastructure, parameters);
@@ -86,23 +81,6 @@ internal static partial class WithLoveApplicationExtensions
 
         throw new InvalidOperationException(
             $"Configuration '{TraceDestinationConfigurationKey}' must be 'Aspire', 'Ax', or 'Phoenix'.");
-    }
-
-    /// <summary>
-    /// Resolves whether Arize receives only the semantic AI trajectory. This setting has no effect
-    /// when the selected trace destination is Aspire.
-    /// </summary>
-    internal static bool ResolveAiOnlyTrace(string? configuredValue)
-    {
-        if (configuredValue is null)
-            return true;
-        if (configuredValue.Equals("true", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (configuredValue.Equals("false", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        throw new InvalidOperationException(
-            $"Configuration '{AiOnlyTraceConfigurationKey}' must be 'true' or 'false'.");
     }
 
     /// <summary>
@@ -377,7 +355,7 @@ internal static partial class WithLoveApplicationExtensions
         WithLoveApplication application,
         bool captureAiContent)
     {
-        Configure(application.ProductsApi, capture: false);
+        Configure(application.ProductsApi, captureAiContent);
         Configure(application.ShopSite, captureAiContent);
         Configure(application.WorkflowServer, captureAiContent);
 
@@ -392,16 +370,6 @@ internal static partial class WithLoveApplicationExtensions
                     context.EnvironmentVariables.Remove(
                         AspireGenAiCaptureMessageContentEnvironmentVariable));
         }
-    }
-
-    private static void ConfigureAiOnlyTrace(WithLoveApplication application, bool aiOnly)
-    {
-        Configure(application.ProductsApi);
-        Configure(application.ShopSite);
-        Configure(application.WorkflowServer);
-
-        void Configure(IResourceBuilder<ProjectResource> resource) =>
-            resource.WithEnvironment(AiOnlyTraceEnvironmentVariable, aiOnly ? "true" : "false");
     }
 
     private static void ConfigureTraceDestination(

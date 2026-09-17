@@ -73,7 +73,6 @@ form (`Parameters__openai_api_key`), not the `:` form used in .NET configuration
 | `ARIZE_OTLP_ENDPOINT`, `ARIZE_API_KEY`, `ARIZE_SPACE_ID` | `Trace__Destination` is absent or `Ax` | The Arize AX connect page. Published applications default to `Ax`; set `Trace__Destination=Aspire` to use the managed Aspire dashboard instead. |
 | `Parameters__stripe_webhook_secret` | Never manually | Automation seeds a bootstrap value, then creates and records the real Stripe Event Destination secret. |
 | `Trace__Destination` | Optional | `Ax` in a published app; accepted values are `Aspire`, `Phoenix`, and `Ax`. `just deploy --trace-destination Phoenix` deploys an internal, ephemeral Phoenix Container App for this sample; its UI is not publicly exposed. `just deploy --trace-destination Aspire` uses the managed Aspire dashboard instead. |
-| `Trace__AiOnly` | Optional | `true`; applies only to AX/Phoenix and exports the connected AI trajectory rather than all trace spans. `just deploy --all-traces` sets it to `false` for one deployment. |
 | `Telemetry__CaptureAiContent` | Optional | `false`; `just deploy --capture` explicitly sets it to `true` for that invocation. |
 
 > **Note:** Deployment values come from `.secrets.env` or the calling environment. AppHost user
@@ -85,9 +84,8 @@ records the generated signing secret automatically.
 
 Published applications default to Arize AX for traces. The AX resource is external and excluded
 from the deployment manifest; its endpoint, API key, and space ID are required only while AX is
-the selected destination. Logs and metrics continue to use Aspire's OTLP configuration, and AX
-headers are attached only to the AX trace exporter. `Trace__AiOnly=true` is the default: AX receives
-the connected chat trajectory while the Aspire dashboard continues to receive logs and metrics.
+the selected destination. AX receives every collected trace span. Logs and metrics continue to use
+Aspire's OTLP configuration, and AX headers are attached only to the AX trace exporter.
 
 The sample's committed telemetry identity key is used in Azure as well as local environments. It
 keeps raw user and session identifiers out of traces and preserves demo grouping, but it is public
@@ -144,8 +142,6 @@ just deploy --trace-destination Aspire
 # Deploy an internal, ephemeral Phoenix trace backend for this sample
 just deploy --trace-destination Phoenix
 
-# Default AX: send all trace spans rather than only the AI trajectory; this does not capture payload content
-just deploy --all-traces
 ```
 
 Before deploying, the recipe verifies that the active Azure CLI subscription and tenant match `.secrets.env`. It fails before provisioning if they do not match. The required Azure targeting values are:

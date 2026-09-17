@@ -32,28 +32,6 @@ public class AppHostTelemetryModelTests
     }
 
     [Theory]
-    [InlineData(null, true)]
-    [InlineData("true", true)]
-    [InlineData("FALSE", false)]
-    public void AiOnlyTrace_DefaultsOnAndAcceptsOnlyBooleanValues(
-        string? configuredValue,
-        bool expected) =>
-        WithLoveApplicationExtensions.ResolveAiOnlyTrace(configuredValue)
-            .Should().Be(expected);
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("yes")]
-    [InlineData(" true ")]
-    public void AiOnlyTrace_RejectsMalformedValues(string configuredValue)
-    {
-        var action = () => WithLoveApplicationExtensions.ResolveAiOnlyTrace(configuredValue);
-
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Trace:AiOnly*true*false*");
-    }
-
-    [Theory]
     [InlineData(null, false)]
     [InlineData("false", false)]
     [InlineData("False", false)]
@@ -120,9 +98,9 @@ public class AppHostTelemetryModelTests
         AssertCaptureEnvironment(products, expectedCapture: false);
         AssertCaptureEnvironment(worker, expectedCapture: false);
         AssertCaptureEnvironment(web, expectedCapture: false);
-        AssertAiOnlyTraceEnvironment(products, expectedAiOnly: true);
-        AssertAiOnlyTraceEnvironment(worker, expectedAiOnly: true);
-        AssertAiOnlyTraceEnvironment(web, expectedAiOnly: true);
+        products.Should().NotContainKey("Trace__AiOnly");
+        worker.Should().NotContainKey("Trace__AiOnly");
+        web.Should().NotContainKey("Trace__AiOnly");
     }
 
     [Fact]
@@ -144,6 +122,7 @@ public class AppHostTelemetryModelTests
             AssertParameterExpression(environment, "Arize__Tracing__Ax__SpaceId", "arize-ax-space-id");
             environment["Arize__Tracing__Ax__Protocol"].Should().Be("http/protobuf");
             environment.Should().NotContainKey("Phoenix__OtlpTracesEndpoint");
+            environment.Should().NotContainKey("Trace__AiOnly");
             service.Annotations.OfType<ResourceRelationshipAnnotation>().Should().ContainSingle(relationship =>
                 ReferenceEquals(relationship.Resource, ax)
                 && relationship.Type == "Reference");
@@ -168,7 +147,7 @@ public class AppHostTelemetryModelTests
             var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
             environment.Should().NotContainKey("Phoenix__OtlpTracesEndpoint");
             environment.Should().NotContainKey("Arize__Tracing__Ax__Endpoint");
-            AssertAiOnlyTraceEnvironment(environment, expectedAiOnly: true);
+            environment.Should().NotContainKey("Trace__AiOnly");
         }
     }
 
@@ -192,6 +171,7 @@ public class AppHostTelemetryModelTests
             environment.Should().NotContainKey("Phoenix__OtlpTracesEndpoint");
             environment.Should().NotContainKey("TelemetryIdentity__Key");
             environment.Should().NotContainKey("TelemetryIdentity__KeyVersion");
+            environment.Should().NotContainKey("Trace__AiOnly");
             AssertCaptureEnvironment(
                 environment,
                 expectedCapture: false);
@@ -212,7 +192,7 @@ public class AppHostTelemetryModelTests
     }
 
     [Fact]
-    public async Task AiContentCaptureOptIn_EnablesOnlyWebAndWorkflowServer()
+    public async Task AiContentCaptureOptIn_EnablesEveryTelemetryProducer()
     {
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
             args: ["Telemetry:CaptureAiContent=true"]);
@@ -222,22 +202,7 @@ public class AppHostTelemetryModelTests
         foreach (var service in model.Resources.OfType<ProjectResource>())
         {
             var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
-            AssertCaptureEnvironment(environment, service.Name != "productsApi");
-        }
-    }
-
-    [Fact]
-    public async Task AiOnlyTraceOptOut_PropagatesToEveryService()
-    {
-        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.WithLove_AppHost>(
-            args: ["Trace:AiOnly=false"]);
-        await using var app = await builder.BuildAsync();
-        var model = app.Services.GetRequiredService<DistributedApplicationModel>();
-
-        foreach (var service in model.Resources.OfType<ProjectResource>())
-        {
-            var environment = await ResolveEnvironmentAsync(service, builder.ExecutionContext);
-            AssertAiOnlyTraceEnvironment(environment, expectedAiOnly: false);
+            AssertCaptureEnvironment(environment, expectedCapture: true);
         }
     }
 
@@ -277,8 +242,4 @@ public class AppHostTelemetryModelTests
         environment.Should().NotContainKey(standardSetting);
     }
 
-    private static void AssertAiOnlyTraceEnvironment(
-        IReadOnlyDictionary<string, object> environment,
-        bool expectedAiOnly) =>
-        environment["Trace__AiOnly"].Should().Be(expectedAiOnly ? "true" : "false");
 }

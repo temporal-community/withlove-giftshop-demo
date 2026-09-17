@@ -7,6 +7,7 @@ using WithLove.Data;
 using WithLove.ProductsAPI.Endpoints;
 using WithLove.ProductsAPI.Middleware;
 using WithLove.ProductsAPI.Services;
+using WithLove.OpenInference;
 using ZiggyCreatures.Caching.Fusion;
 using ZiggyCreatures.Caching.Fusion.Backplane.StackExchangeRedis;
 
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddOpenInferenceDefaults();
+builder.Services.AddSingleton(OpenInferenceTraceConfig.Default);
 
 builder.ConfigureOpenTelemetry()
     .WithTracing(tracing =>

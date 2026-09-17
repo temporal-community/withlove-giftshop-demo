@@ -37,25 +37,20 @@ compile: build
 # tries, since run is the documented default. Keep the line below single: just uses the last
 # comment line as the `just --list` description.
 
-# Start the full stack with Phoenix; pass --capture to export AI payload content or --all-traces to disable AI-only filtering
+# Start the full stack with Phoenix; pass --capture to export AI payload content
 [arg("capture", long="capture", value="true")]
-[arg("all_traces", long="all-traces", value="true")]
-run capture="false" all_traces="false": (run-phoenix capture all_traces)
+run capture="false": (run-phoenix capture)
 
-# Start with Phoenix; pass --capture to export AI payload content or --all-traces to disable AI-only filtering
+# Start with Phoenix; pass --capture to export AI payload content
 [arg("Telemetry__CaptureAiContent", long="capture", value="true")]
-[arg("all_traces", long="all-traces", value="true")]
 [env("Trace__Destination", "Phoenix")]
-run-phoenix $Telemetry__CaptureAiContent="false" all_traces="false":
-    @if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
+run-phoenix $Telemetry__CaptureAiContent="false":
     @aspire start --apphost {{ apphost }}
 
-# Start with AX; pass --capture to export AI payload content or --all-traces to disable AI-only filtering
+# Start with AX; pass --capture to export AI payload content
 [arg("Telemetry__CaptureAiContent", long="capture", value="true")]
-[arg("all_traces", long="all-traces", value="true")]
 [env("Trace__Destination", "Ax")]
-run-ax $Telemetry__CaptureAiContent="false" all_traces="false":
-    @if [[ "{{all_traces}}" == "true" ]]; then export Trace__AiOnly=false; fi
+run-ax $Telemetry__CaptureAiContent="false":
     @aspire start --apphost {{ apphost }}
 
 # Start with the Aspire dashboard as the trace destination; pass --capture to export AI payload content
@@ -213,15 +208,13 @@ write-stripe-webhook-secret:
 # Requires .secrets.env in the repo root — copy .secrets.env.example and fill in your values.
 #   just deploy                      # deploy to azureprod (uses cached state)
 #   just deploy --capture            # deploy and capture AI payload content in telemetry
-#   just deploy --all-traces         # default AX: export all trace spans rather than AI-only trajectory
 #   just deploy --trace-destination Aspire   # deploy with Aspire as the trace destination
 #   just deploy --trace-destination Phoenix  # deploy internal, ephemeral Phoenix for this sample
 #   just deploy staging              # deploy to a different environment
 #   just deploy-clean                # deploy with fresh Aspire state
 [arg("capture", long="capture", value="true")]
-[arg("all_traces", long="all-traces", value="true")]
 [arg("trace_destination", long="trace-destination")]
-deploy environment="azureprod" reset_state="false" capture="false" all_traces="false" trace_destination="":
+deploy environment="azureprod" reset_state="false" capture="false" trace_destination="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ ! -f .secrets.env ]]; then
@@ -238,10 +231,6 @@ deploy environment="azureprod" reset_state="false" capture="false" all_traces="f
     if [[ -n "{{trace_destination}}" ]]; then
         export Trace__Destination="{{trace_destination}}"
     fi
-    if [[ "{{all_traces}}" == "true" ]]; then
-        export Trace__AiOnly=false
-    fi
-
     : "${Azure__SubscriptionId:?Azure__SubscriptionId is required}"
     : "${Azure__ResourceGroup:?Azure__ResourceGroup is required}"
     : "${Azure__Location:?Azure__Location is required}"
@@ -445,13 +434,11 @@ deploy environment="azureprod" reset_state="false" capture="false" all_traces="f
 # Use this after changing Azure__Location, Azure__ResourceGroup, or similar infra-level settings.
 #   just deploy-clean           # deploy to azureprod with fresh state
 #   just deploy-clean --capture # deploy with fresh state and capture AI payload content
-#   just deploy-clean --all-traces # fresh state; default AX exports all trace spans
 #   just deploy-clean staging   # deploy to staging with fresh state
 [arg("capture", long="capture", value="true")]
-[arg("all_traces", long="all-traces", value="true")]
 [arg("trace_destination", long="trace-destination")]
-deploy-clean environment="azureprod" capture="false" all_traces="false" trace_destination="":
-    just deploy "{{environment}}" true "{{capture}}" "{{all_traces}}" "{{trace_destination}}"
+deploy-clean environment="azureprod" capture="false" trace_destination="":
+    just deploy "{{environment}}" true "{{capture}}" "{{trace_destination}}"
 
 # Read-only: `aspire deploy --list-steps` enumerates the pipeline and exits. It runs none of
 # `deploy`'s safeguards — no subscription guard, no Key Vault purge, no resource-group wait —

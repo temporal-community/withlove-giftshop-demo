@@ -6,7 +6,6 @@ using TemporalCommunity.Extensions.AI;
 using WithLove.Web.Models;
 using WithLove.OpenInference;
 using WithLove.OpenInference.Spans;
-using WithLove.ServiceDefaults.Telemetry;
 using WithLove.Web.Telemetry;
 using WithLove.Workflows;
 using WithLove.Workflows.Chat;
@@ -219,7 +218,6 @@ public class ChatService(
             openInferenceTraceConfig);
         var activity = chain.Activity;
         activity?.SetTag("chat.operation_id", operationId);
-        using var traceAnchor = AiTraceAnchorScope.Push(activity);
 
         try
         {

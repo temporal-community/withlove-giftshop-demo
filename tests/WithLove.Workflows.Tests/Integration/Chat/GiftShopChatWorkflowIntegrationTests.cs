@@ -12,7 +12,6 @@ using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
 using WithLove.OpenInference;
 using WithLove.OpenInference.Spans;
-using WithLove.ServiceDefaults.Telemetry;
 using WithLove.Web.Telemetry;
 using WithLove.Web.Models;
 using WithLove.WorkflowServer.Services;
@@ -107,7 +106,6 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         using var source = new ActivitySource(sourceName);
         using var productsSource = new ActivitySource("productsApi");
         var allCompletedActivities = new ConcurrentBag<Activity>();
-        var exportedAiActivities = new ConcurrentBag<Activity>();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(
                 sourceName,
@@ -118,9 +116,6 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             .AddHttpClientInstrumentation()
             .AddProcessor(new SimpleActivityExportProcessor(
                 new CollectingActivityExporter(allCompletedActivities)))
-            .AddProcessor(new Microsoft.Extensions.Hosting.AiTraceReparentProcessor())
-            .AddProcessor(new Microsoft.Extensions.Hosting.AiOnlyTraceExportProcessor(
-                new CollectingActivityExporter(exportedAiActivities)))
             .Build();
         var chatClient = new ScriptedGiftShopChatClient((call, _, _) => call switch
         {
@@ -134,8 +129,7 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         var visibleContent = OpenInferenceTraceConfig.Enabled;
         await using var productsServer = await TracingProductsServer.StartAsync(
             productsSource,
-            allCompletedActivities,
-            exportedAiActivities);
+            allCompletedActivities);
         await using var harness = await GiftShopChatWorkerHarness.StartAsync(
             fixture.Environment,
             chatClient,
@@ -155,7 +149,6 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             (GiftShopChatWorkflow workflow) => workflow.RunAsync(harness.WorkflowInput),
             new WorkflowOptions(workflowId, harness.TaskQueue));
         allCompletedActivities.Clear();
-        exportedAiActivities.Clear();
 
         Activity chainActivity;
         using (OpenInferenceContextScope.Push(new OpenInferenceContextValues
@@ -172,7 +165,6 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             chain.Activity.Should().NotBeNull();
             chainActivity = chain.Activity!;
             chainActivity.SetTag("chat.operation_id", operationId);
-            using var traceAnchor = AiTraceAnchorScope.Push(chainActivity);
             var request = CreateRequest(operationId, "Find a keepsake");
 
             var result = await handle.ExecuteUpdateAsync(
@@ -186,9 +178,6 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         tracerProvider.ForceFlush().Should().BeTrue();
         productsServer.ForceFlush().Should().BeTrue();
         var turnTrace = allCompletedActivities
-            .Where(activity => activity.TraceId == chainActivity.TraceId)
-            .ToArray();
-        var exportedTurnTrace = exportedAiActivities
             .Where(activity => activity.TraceId == chainActivity.TraceId)
             .ToArray();
         var modelSpans = turnTrace
@@ -216,24 +205,7 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             .Should().Contain("Keepsake Box");
         IsDescendantOf(toolSpan, chainActivity, turnTrace).Should().BeTrue();
         retrieverSpan.TraceId.Should().Be(chainActivity.TraceId);
-        productsServer.BaggageHeaders.Should().ContainSingle()
-            .Which.Should().Contain("withlove.ai.trace_root");
         IsDescendantOf(retrieverSpan, chainActivity, turnTrace).Should().BeTrue();
-        exportedTurnTrace.Should().HaveCount(5);
-        exportedTurnTrace.Should().ContainSingle(activity => activity.OperationName == "chat.turn");
-        exportedTurnTrace.Should().Contain(activity =>
-            Equals(activity.GetTagItem("gen_ai.operation.name"), "chat"));
-        exportedTurnTrace.Should().Contain(activity =>
-            Equals(activity.GetTagItem("gen_ai.operation.name"), "execute_tool"));
-        exportedTurnTrace
-            .Where(activity => Equals(activity.GetTagItem("gen_ai.operation.name"), "chat")
-                || Equals(activity.GetTagItem("gen_ai.operation.name"), "execute_tool")
-                || Equals(activity.GetTagItem(OpenInferenceAttributes.OpenInferenceSpanKind), "RETRIEVER"))
-            .Should().OnlyContain(activity => activity.ParentSpanId == chainActivity.SpanId);
-        exportedTurnTrace.Should().NotContain(activity =>
-            activity.OperationName.StartsWith("StartActivity:", StringComparison.Ordinal)
-            || activity.OperationName.StartsWith("RunActivity:", StringComparison.Ordinal)
-            || activity.OperationName.StartsWith("HandleUpdate:", StringComparison.Ordinal));
 
         await handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
     }

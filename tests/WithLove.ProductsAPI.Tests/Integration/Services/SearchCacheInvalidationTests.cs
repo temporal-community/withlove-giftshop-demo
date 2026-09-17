@@ -7,6 +7,7 @@ using Microsoft.Extensions.AI;
 using WithLove.Data;
 using WithLove.Data.Models;
 using WithLove.ProductsAPI.Services;
+using WithLove.OpenInference;
 using ZiggyCreatures.Caching.Fusion;
 
 /// <summary>
@@ -45,7 +46,13 @@ public class SearchCacheInvalidationTests
 
     private ProductCacheService CreateService()
     {
-        return new ProductCacheService(_fakeDbContext, _cache, _fakeLogger, _fakeEmbeddingGenerator, new Instrumentation());
+        return new ProductCacheService(
+            _fakeDbContext,
+            _cache,
+            _fakeLogger,
+            _fakeEmbeddingGenerator,
+            new Instrumentation(),
+            OpenInferenceTraceConfig.Disabled);
     }
 
     [Fact]

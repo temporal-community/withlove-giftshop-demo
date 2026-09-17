@@ -25,14 +25,14 @@ public class DeployCaptureOptionTests
         var justfile = File.ReadAllText(Path.Combine(RepositoryRoot(), "justfile"));
 
         justfile.Should().Contain(
-            "[arg(\"capture\", long=\"capture\", value=\"true\")]\n[arg(\"all_traces\", long=\"all-traces\", value=\"true\")]\n[arg(\"trace_destination\", long=\"trace-destination\")]\ndeploy environment=\"azureprod\" reset_state=\"false\" capture=\"false\" all_traces=\"false\" trace_destination=\"\":",
+            "[arg(\"capture\", long=\"capture\", value=\"true\")]\n[arg(\"trace_destination\", long=\"trace-destination\")]\ndeploy environment=\"azureprod\" reset_state=\"false\" capture=\"false\" trace_destination=\"\":",
             "just deploy must parse its telemetry options rather than treating them as deployment environments");
         justfile.Should().Contain(
             "source .secrets.env\n\n    # Apply the command-line privacy opt-in after loading local deployment settings, so\n    # `just deploy --capture` cannot be accidentally overridden by .secrets.env.\n    if [[ \"{{capture}}\" == \"true\" ]]; then\n        export Telemetry__CaptureAiContent=true\n    fi",
             "the explicit command-line opt-in must take precedence over .secrets.env");
         justfile.Should().Contain(
-            "if [[ -n \"{{trace_destination}}\" ]]; then\n        export Trace__Destination=\"{{trace_destination}}\"\n    fi\n    if [[ \"{{all_traces}}\" == \"true\" ]]; then\n        export Trace__AiOnly=false\n    fi",
-            "the destination and trace-scope flags must override sourced deployment configuration");
+            "if [[ -n \"{{trace_destination}}\" ]]; then\n        export Trace__Destination=\"{{trace_destination}}\"\n    fi",
+            "the destination flag must override sourced deployment configuration");
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class DeployCaptureOptionTests
         var justfile = File.ReadAllText(Path.Combine(RepositoryRoot(), "justfile"));
 
         justfile.Should().Contain(
-            "[arg(\"capture\", long=\"capture\", value=\"true\")]\n[arg(\"all_traces\", long=\"all-traces\", value=\"true\")]\n[arg(\"trace_destination\", long=\"trace-destination\")]\ndeploy-clean environment=\"azureprod\" capture=\"false\" all_traces=\"false\" trace_destination=\"\":\n    just deploy \"{{environment}}\" true \"{{capture}}\" \"{{all_traces}}\" \"{{trace_destination}}\"",
+            "[arg(\"capture\", long=\"capture\", value=\"true\")]\n[arg(\"trace_destination\", long=\"trace-destination\")]\ndeploy-clean environment=\"azureprod\" capture=\"false\" trace_destination=\"\":\n    just deploy \"{{environment}}\" true \"{{capture}}\" \"{{trace_destination}}\"",
             "deploy-clean must preserve every explicit telemetry override when it delegates to deploy");
     }
 }

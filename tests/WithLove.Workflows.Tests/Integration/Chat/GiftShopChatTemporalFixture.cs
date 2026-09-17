@@ -336,24 +336,18 @@ internal sealed class TracingProductsServer : IAsyncDisposable
     private TracingProductsServer(
         WebApplication application,
         Uri baseUri,
-        TracerProvider tracerProvider,
-        ConcurrentQueue<string> baggageHeaders)
+        TracerProvider tracerProvider)
     {
         this.application = application;
         BaseUri = baseUri;
         this.tracerProvider = tracerProvider;
-        BaggageHeaders = baggageHeaders;
     }
 
     internal Uri BaseUri { get; }
-    internal ConcurrentQueue<string> BaggageHeaders { get; }
-
     internal static async Task<TracingProductsServer> StartAsync(
         ActivitySource activitySource,
-        ConcurrentBag<Activity> completedActivities,
-        ConcurrentBag<Activity> exportedAiActivities)
+        ConcurrentBag<Activity> completedActivities)
     {
-        var baggageHeaders = new ConcurrentQueue<string>();
         var builder = WebApplication.CreateSlimBuilder();
         builder.Configuration.Sources.Clear();
         builder.Logging.ClearProviders();
@@ -363,19 +357,10 @@ internal sealed class TracingProductsServer : IAsyncDisposable
                 .AddAspNetCoreInstrumentation()
                 .AddSource(activitySource.Name)
                 .AddProcessor(new SimpleActivityExportProcessor(
-                    new CollectingActivityExporter(completedActivities)))
-                .AddProcessor(new Microsoft.Extensions.Hosting.AiTraceReparentProcessor())
-                .AddProcessor(new Microsoft.Extensions.Hosting.AiOnlyTraceExportProcessor(
-                    new CollectingActivityExporter(exportedAiActivities))));
+                    new CollectingActivityExporter(completedActivities))));
         var application = builder.Build();
-        application.MapGet("/api/products/search", (HttpContext context) =>
+        application.MapGet("/api/products/search", () =>
         {
-            if (context.Request.Headers.TryGetValue("baggage", out var values))
-            {
-                foreach (var value in values)
-                    baggageHeaders.Enqueue(value!);
-            }
-
             using var retriever = activitySource.StartRetriever("product.search");
             retriever.Record([]);
             return Results.Text($$"""{"value":[{{ProductJson}}]}""", "application/json");
@@ -386,8 +371,7 @@ internal sealed class TracingProductsServer : IAsyncDisposable
         return new TracingProductsServer(
             application,
             new Uri(address),
-            application.Services.GetRequiredService<TracerProvider>(),
-            baggageHeaders);
+            application.Services.GetRequiredService<TracerProvider>());
     }
 
     internal bool ForceFlush() => tracerProvider.ForceFlush();

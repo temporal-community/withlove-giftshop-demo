@@ -19,12 +19,13 @@ token, and cost record.
 AI payload content is disabled by default. `Telemetry:CaptureAiContent=true` is the application-level
 authorization that enables `input.value`/`output.value` on the application-owned `chat.turn` CHAIN,
 `gen_ai.input.messages`, `gen_ai.output.messages`, and `gen_ai.system_instructions` on the existing
-durable model span, plus TOOL arguments and results. AppHost sends the resolved value explicitly to
-Web and WorkflowServer through `Telemetry__CaptureAiContent`. This is the only setting that can
-authorize capture; a missing or `false` value keeps all payloads hidden.
+durable model span, TOOL arguments and results, and the `product.search` RETRIEVER input. AppHost
+sends the resolved value explicitly to Web, WorkflowServer, and ProductsAPI through
+`Telemetry__CaptureAiContent`. This is the only setting that can authorize capture; a missing or
+`false` value keeps all payloads hidden.
 The setting does not affect span structure, model/tool names, token counts, status, timing, routing,
-logs, metrics, error policy, or correlation IDs. Product retrieval/embedding payloads
-remain unconditionally hidden by their component-specific policy.
+logs, metrics, error policy, or correlation IDs. Embedding payloads remain unconditionally hidden;
+product retrieval records returned IDs only, never product document content.
 The custom Temporal update-context interceptor preserves the physical hierarchy from `chat.turn`
 through `UpdateWorkflow` to model, tool, and retriever spans. The per-turn `chat.operation_id` is
 also carried onto application and model spans as a secondary search and verification key.
@@ -79,10 +80,8 @@ The root `justfile` exposes the same backend choice with content capture disable
 ```bash
 just run-phoenix
 just run-phoenix --capture
-just run-phoenix --all-traces
 just run-ax
 just run-ax --capture
-just run-ax --all-traces
 
 # Send all traces to the Aspire dashboard
 just run-aspire
@@ -93,39 +92,31 @@ just deploy --capture
 # Azure deployment with Aspire traces instead of the published AX default
 just deploy --trace-destination Aspire
 
-# Azure deployment: default AX sends all trace spans rather than only the AI trajectory
-just deploy --all-traces
 ```
 
-`--all-traces` sets `Trace__AiOnly=false`; it does not enable payload capture. Combine it with
-`--capture` only when both broader span export and AI payload content are appropriate. The local
-destination recipes are `just run-phoenix`, `just run-ax`, and `just run-aspire`; deployment uses
-`--trace-destination <Aspire|Phoenix|Ax>` to override its published `Ax` default.
+The local destination recipes are `just run-phoenix`, `just run-ax`, and `just run-aspire`;
+deployment uses `--trace-destination <Aspire|Phoenix|Ax>` to override its published `Ax` default.
 
-Captured prompts, responses, system instructions, and tool payloads can contain customer or
-business-sensitive data. ProductsAPI is explicitly forced to capture-disabled even when the flag is
-enabled, preserving its component-specific retrieval/embedding policy and overriding inherited
-process environment. Changing this setting affects new telemetry only; it does not redact or
-delete traces already retained by Phoenix or AX. Phoenix is ephemeral in this AppHost because no
-volume is mounted, while AX retention and deletion must be handled separately through AX controls.
+Captured prompts, responses, system instructions, tool payloads, and product-search queries can
+contain customer or business-sensitive data. Embedding payloads remain capture-disabled even when
+the flag is enabled. Product retrieval records returned IDs only, never product document content.
+Changing this setting affects new telemetry only; it does not redact or delete traces already
+retained by Phoenix or AX. Phoenix is ephemeral in this AppHost because no volume is mounted, while
+AX retention and deletion must be handled separately through AX controls.
 
 No collector region is assumed. `ARIZE_OTLP_ENDPOINT` must be the endpoint supplied for the AX
 space. OTLP/HTTP is the default protocol; an endpoint ending in `/v1` is normalized to the
 signal-specific `/v1/traces` path.
 
 ServiceDefaults registers one trace exporter. `Trace:Destination` selects Aspire, Phoenix, or AX;
-the two Arize backends are mutually exclusive. When either Arize backend is referenced, it receives
-the connected AI trajectory by default (`Trace:AiOnly=true`) while
-`OTEL_EXPORTER_OTLP_ENDPOINT` still carries logs and metrics to Aspire. Set `Trace:AiOnly=false`
-to send all traces to the selected Arize backend. The Aspire destination always receives all three
-signals. With no endpoint, no telemetry is exported and a startup warning explains the missing
-trace destination. AX authentication headers are configured only on the named AX trace exporter,
-so they cannot leak to Aspire's logs or metrics exporters.
+the two Arize backends are mutually exclusive. Phoenix and AX receive every collected trace span,
+including application, Temporal, HTTP, EF Core, and model spans. `OTEL_EXPORTER_OTLP_ENDPOINT`
+continues to carry logs and metrics to Aspire when either Arize backend is selected; the Aspire
+destination receives all three signals. With no endpoint, no telemetry is exported and a startup
+warning explains the missing trace destination. AX authentication headers are configured only on
+the named AX trace exporter, so they cannot leak to Aspire's logs or metrics exporters.
 
-The AI-only trajectory preserves the spans Phoenix and AX need to reconstruct a usable chat turn:
-the `CHAIN` `chat.turn` root, an emitted `durable.turn` bridge, LLM chat spans, `TOOL` spans, and
-`RETRIEVER` spans. It intentionally excludes unrelated ASP.NET Core, HTTP client, EF Core, and
-standalone embedding spans. The filter is not used for the Aspire destination.
+Filter trace views in the selected destination rather than removing spans in the application.
 
 All three services use `openinference.project.name=withlove-giftshop`. Their distinct
 `service.name` values remain intact for filtering inside that project.

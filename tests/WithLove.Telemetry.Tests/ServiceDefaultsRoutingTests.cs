@@ -26,6 +26,8 @@ public class ServiceDefaultsRoutingTests
         IsAllowed(options, "/health").Should().BeFalse();
         IsAllowed(options, "/alive").Should().BeFalse();
         IsAllowed(options, "/blocked").Should().BeFalse();
+        IsAllowed(options, "/_blazor/initializers/").Should().BeFalse();
+        IsAllowed(options, "/_blazor/negotiate", "POST").Should().BeFalse();
     }
 
     [Theory]
@@ -38,7 +40,7 @@ public class ServiceDefaultsRoutingTests
     [InlineData("GET", "/api/products/42", true)]
     [InlineData("GET", "/api/export.json", true)]
     [InlineData("POST", "/scripts/app.js", true)]
-    public void ConfigureAspNetCoreTracing_FiltersOnlyReadRequestsForKnownStaticAssets(
+    public void ConfigureAspNetCoreTracing_FiltersKnownStaticReadRequests(
         string method,
         string path,
         bool expected)
@@ -91,43 +93,10 @@ public class ServiceDefaultsRoutingTests
         routing.TraceDestination.Should().Be(TraceExportDestination.Ax);
         routing.ExportLogsToAspire.Should().BeTrue();
         routing.ExportMetricsToAspire.Should().BeTrue();
-        routing.ExportAiOnly.Should().BeTrue();
         routing.Ax.Should().NotBeNull();
         routing.Ax!.Endpoint.Should().Be(new Uri("https://example.test/v1/traces"));
         routing.Ax.Protocol.Should().Be(OtlpExportProtocol.HttpProtobuf);
         routing.Ax.Headers.Should().Be("arize-space-id=private-space-id,arize-api-key=private-api-key");
-    }
-
-    [Theory]
-    [InlineData(null, true)]
-    [InlineData("true", true)]
-    [InlineData("FALSE", false)]
-    public void Resolve_AiOnlyTrace_DefaultsOnAndAcceptsOnlyBooleanValues(
-        string? configuredValue,
-        bool expected)
-    {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            [Extensions.AiOnlyTraceConfigurationKey] = configuredValue,
-        }).Build();
-
-        TelemetryExportRouting.Resolve(configuration).ExportAiOnly.Should().Be(expected);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("yes")]
-    [InlineData(" true ")]
-    public void Resolve_AiOnlyTrace_RejectsMalformedValues(string configuredValue)
-    {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            [Extensions.AiOnlyTraceConfigurationKey] = configuredValue,
-        }).Build();
-
-        var action = () => TelemetryExportRouting.Resolve(configuration);
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Trace:AiOnly*true*false*");
     }
 
     [Theory]

@@ -19,14 +19,12 @@ namespace WithLove.ProductsAPI.Services;
 /// </summary>
 public partial class ProductCacheService : IProductCacheService
 {
-    private static readonly OpenInferenceTraceConfig SearchTraceConfig =
-        OpenInferenceTraceConfig.Disabled;
-
     private readonly ProductsDbContext _dbContext;
     private readonly IFusionCache _cache;
     private readonly ILogger<ProductCacheService> _logger;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
     private readonly Instrumentation _instrumentation;
+    private readonly OpenInferenceTraceConfig _searchTraceConfig;
 
     private const string ProductKeyPrefix = "product:";
     private const string ProductListKey = "product:v2:all";
@@ -38,13 +36,15 @@ public partial class ProductCacheService : IProductCacheService
         IFusionCache cache,
         ILogger<ProductCacheService> logger,
         IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
-        Instrumentation instrumentation)
+        Instrumentation instrumentation,
+        OpenInferenceTraceConfig searchTraceConfig)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _embeddingGenerator = embeddingGenerator ?? throw new ArgumentNullException(nameof(embeddingGenerator));
         _instrumentation = instrumentation ?? throw new ArgumentNullException(nameof(instrumentation));
+        _searchTraceConfig = searchTraceConfig ?? throw new ArgumentNullException(nameof(searchTraceConfig));
     }
 
     public async Task<Product?> GetProductByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -256,7 +256,7 @@ public partial class ProductCacheService : IProductCacheService
         using var retriever = _instrumentation.ActivitySource.StartRetriever(
             "product.search",
             query,
-            SearchTraceConfig);
+            _searchTraceConfig);
         var activity = retriever.Activity;
 
         List<(int ProductId, int Rank)> ftsResults;

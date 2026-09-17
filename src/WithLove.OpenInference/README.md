@@ -39,7 +39,7 @@ to `session.id`, `user.id`, or `conversation.id`.
 
 Sensitive inputs and outputs are disabled by default. The AppHost-level
 `Telemetry:CaptureAiContent=true` setting explicitly authorizes both directions for the chat CHAIN,
-the existing durable model span, and TOOL payloads. It is passed to services as
+the existing durable model span, TOOL payloads, and the product-search RETRIEVER input. It is passed to services as
 `Telemetry__CaptureAiContent`. A missing or `false` value keeps content hidden. Any content-capture
 change must preserve the trace privacy contract documented in `docs/telemetry.md`.
 

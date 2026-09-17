@@ -35,7 +35,6 @@ public class OtlpExporterIntegrationTests
             ["Phoenix:OtlpTracesEndpoint"] = usePhoenix
                 ? new Uri(phoenix.BaseUri, "v1/traces").AbsoluteUri
                 : null,
-            ["Trace:AiOnly"] = "false",
             ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
         builder.ConfigureOpenTelemetry();
@@ -82,7 +81,6 @@ public class OtlpExporterIntegrationTests
             ["Arize:Tracing:Ax:Protocol"] = "http/protobuf",
             ["Arize:Tracing:Ax:ApiKey"] = apiKey,
             ["Arize:Tracing:Ax:SpaceId"] = spaceId,
-            ["Trace:AiOnly"] = "false",
             ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
         builder.ConfigureOpenTelemetry();
@@ -120,12 +118,12 @@ public class OtlpExporterIntegrationTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ExportedTrace_AiOnlyRetainsClassifiedAiSpansForEachArizeDestination(bool usePhoenix)
+    public async Task ExportedTrace_ContainsAllCollectedSpansForEachArizeDestination(bool usePhoenix)
     {
         await using var aspire = await OtlpTestServer.StartAsync();
         await using var arize = await OtlpTestServer.StartAsync();
-        var applicationName = $"WithLove.AiOnlyService.{Guid.NewGuid():N}";
-        var sourceName = $"WithLove.AiOnlySource.{Guid.NewGuid():N}";
+        var applicationName = $"WithLove.FullTraceService.{Guid.NewGuid():N}";
+        var sourceName = $"WithLove.FullTraceSource.{Guid.NewGuid():N}";
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             ApplicationName = applicationName,
@@ -143,7 +141,6 @@ public class OtlpExporterIntegrationTests
             ["Arize:Tracing:Ax:Protocol"] = usePhoenix ? null : "http/protobuf",
             ["Arize:Tracing:Ax:ApiKey"] = usePhoenix ? null : "ax-api-key-sentinel",
             ["Arize:Tracing:Ax:SpaceId"] = usePhoenix ? null : "ax-space-id-sentinel",
-            ["Trace:AiOnly"] = "true",
             ["OpenInference:ProjectName"] = "withlove-giftshop",
         });
         builder.ConfigureOpenTelemetry(configureTracing: tracing => tracing.AddSource(sourceName));
@@ -182,8 +179,8 @@ public class OtlpExporterIntegrationTests
         wireText.Should().Contain("openai.chat");
         wireText.Should().Contain("execute_tool search_products");
         wireText.Should().Contain("product.search");
-        wireText.Should().NotContain("HTTP GET /collections");
-        wireText.Should().NotContain("openai.embeddings");
+        wireText.Should().Contain("HTTP GET /collections");
+        wireText.Should().Contain("openai.embeddings");
         aspire.Requests.Should().NotContain(captured => captured.Path == "/v1/traces");
     }
 }
