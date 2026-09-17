@@ -12,6 +12,7 @@ using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
 using WithLove.OpenInference;
 using WithLove.OpenInference.Spans;
+using WithLove.ServiceDefaults.Telemetry;
 using WithLove.Web.Telemetry;
 using WithLove.Web.Models;
 using WithLove.WorkflowServer.Services;
@@ -104,6 +105,7 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         const string sourceName = "withlove-test-chat-turn";
         const string operationId = "trace-turn-1";
         using var source = new ActivitySource(sourceName);
+        using var productsSource = new ActivitySource("productsApi");
         var allCompletedActivities = new ConcurrentBag<Activity>();
         var exportedAiActivities = new ConcurrentBag<Activity>();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
@@ -113,8 +115,10 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
                 Temporalio.Extensions.OpenTelemetry.TracingInterceptor.WorkflowsSource.Name,
                 Temporalio.Extensions.OpenTelemetry.TracingInterceptor.ActivitiesSource.Name)
             .AddWorkflowServerTracingSources()
+            .AddHttpClientInstrumentation()
             .AddProcessor(new SimpleActivityExportProcessor(
                 new CollectingActivityExporter(allCompletedActivities)))
+            .AddProcessor(new Microsoft.Extensions.Hosting.AiTraceReparentProcessor())
             .AddProcessor(new Microsoft.Extensions.Hosting.AiOnlyTraceExportProcessor(
                 new CollectingActivityExporter(exportedAiActivities)))
             .Build();
@@ -128,9 +132,14 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             _ => throw new InvalidOperationException($"Unexpected model call {call}."),
         });
         var visibleContent = OpenInferenceTraceConfig.Enabled;
+        await using var productsServer = await TracingProductsServer.StartAsync(
+            productsSource,
+            allCompletedActivities,
+            exportedAiActivities);
         await using var harness = await GiftShopChatWorkerHarness.StartAsync(
             fixture.Environment,
             chatClient,
+            productsBaseAddress: productsServer.BaseUri,
             traceConfig: visibleContent);
         var targetHost = fixture.Environment.Client.Connection.Options.TargetHost
             ?? throw new InvalidOperationException("Temporal target host is unavailable.");
@@ -163,6 +172,7 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             chain.Activity.Should().NotBeNull();
             chainActivity = chain.Activity!;
             chainActivity.SetTag("chat.operation_id", operationId);
+            using var traceAnchor = AiTraceAnchorScope.Push(chainActivity);
             var request = CreateRequest(operationId, "Find a keepsake");
 
             var result = await handle.ExecuteUpdateAsync(
@@ -174,6 +184,7 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         }
 
         tracerProvider.ForceFlush().Should().BeTrue();
+        productsServer.ForceFlush().Should().BeTrue();
         var turnTrace = allCompletedActivities
             .Where(activity => activity.TraceId == chainActivity.TraceId)
             .ToArray();
@@ -185,6 +196,9 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             .ToArray();
         var toolSpan = turnTrace.Should().ContainSingle(activity =>
                 Equals(activity.GetTagItem("gen_ai.operation.name"), "execute_tool"))
+            .Subject;
+        var retrieverSpan = allCompletedActivities.Should().ContainSingle(activity =>
+                Equals(activity.GetTagItem(OpenInferenceAttributes.OpenInferenceSpanKind), "RETRIEVER"))
             .Subject;
 
         modelSpans.Should().HaveCount(2);
@@ -201,12 +215,21 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         toolSpan.GetTagItem(OpenInferenceAttributes.OutputValue)?.ToString()
             .Should().Contain("Keepsake Box");
         IsDescendantOf(toolSpan, chainActivity, turnTrace).Should().BeTrue();
-        exportedTurnTrace.Should().HaveCount(4);
+        retrieverSpan.TraceId.Should().Be(chainActivity.TraceId);
+        productsServer.BaggageHeaders.Should().ContainSingle()
+            .Which.Should().Contain("withlove.ai.trace_root");
+        IsDescendantOf(retrieverSpan, chainActivity, turnTrace).Should().BeTrue();
+        exportedTurnTrace.Should().HaveCount(5);
         exportedTurnTrace.Should().ContainSingle(activity => activity.OperationName == "chat.turn");
         exportedTurnTrace.Should().Contain(activity =>
             Equals(activity.GetTagItem("gen_ai.operation.name"), "chat"));
         exportedTurnTrace.Should().Contain(activity =>
             Equals(activity.GetTagItem("gen_ai.operation.name"), "execute_tool"));
+        exportedTurnTrace
+            .Where(activity => Equals(activity.GetTagItem("gen_ai.operation.name"), "chat")
+                || Equals(activity.GetTagItem("gen_ai.operation.name"), "execute_tool")
+                || Equals(activity.GetTagItem(OpenInferenceAttributes.OpenInferenceSpanKind), "RETRIEVER"))
+            .Should().OnlyContain(activity => activity.ParentSpanId == chainActivity.SpanId);
         exportedTurnTrace.Should().NotContain(activity =>
             activity.OperationName.StartsWith("StartActivity:", StringComparison.Ordinal)
             || activity.OperationName.StartsWith("RunActivity:", StringComparison.Ordinal)

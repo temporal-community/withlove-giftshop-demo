@@ -11,6 +11,7 @@ using WithLove.Data;
 using WithLove.OpenInference;
 using WithLove.WorkflowServer.Services;
 using WithLove.WorkflowServer.Telemetry;
+using WithLove.Workflows;
 using WithLove.Workflows.Activities;
 using WithLove.Workflows.Chat;
 using WithLove.Workflows.Workflows;
@@ -84,7 +85,7 @@ builder.Services.AddChatClient(
         // error. Slight model drift beats a sample that is reproducible and dead. The usual reason
         // to pin — keeping prompt A/B results attributable to one model version — does not apply
         // here, because this repo has no eval harness by choice. Pin the date if that changes.
-        new OpenAI.Chat.ChatClient("gpt-5-nano", openaiKey).AsIChatClient(),
+        new OpenAI.Chat.ChatClient(WorkflowConstants.ChatModelId, openaiKey).AsIChatClient(),
         OpenInferenceTraceConfig.Default))
     .Build();
 

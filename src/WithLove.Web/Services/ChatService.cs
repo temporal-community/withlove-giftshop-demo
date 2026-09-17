@@ -6,7 +6,9 @@ using TemporalCommunity.Extensions.AI;
 using WithLove.Web.Models;
 using WithLove.OpenInference;
 using WithLove.OpenInference.Spans;
+using WithLove.ServiceDefaults.Telemetry;
 using WithLove.Web.Telemetry;
+using WithLove.Workflows;
 using WithLove.Workflows.Chat;
 using WithLove.Workflows.Workflows;
 
@@ -217,6 +219,7 @@ public class ChatService(
             openInferenceTraceConfig);
         var activity = chain.Activity;
         activity?.SetTag("chat.operation_id", operationId);
+        using var traceAnchor = AiTraceAnchorScope.Push(activity);
 
         try
         {
@@ -242,6 +245,7 @@ public class ChatService(
                 ChatOptions = new ChatOptions
                 {
                     Instructions = GiftShopChatPrompt.BuildInstructions(_userContext),
+                    ModelId = WorkflowConstants.ChatModelId,
 
                     // Always bound the output budget. A single turn runs up to the workflow's
                     // 40-iteration tool cap, so an unbounded step does not cost one runaway

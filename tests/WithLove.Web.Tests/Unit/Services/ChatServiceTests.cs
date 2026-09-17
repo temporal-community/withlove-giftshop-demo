@@ -8,6 +8,7 @@ using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
 using WithLove.OpenInference;
 using WithLove.Web.Telemetry;
+using WithLove.Workflows;
 using WithLove.Workflows.Chat;
 using WithLove.Workflows.Workflows;
 
@@ -615,6 +616,7 @@ public class ChatServiceTests : IDisposable
         // workflow's 40-iteration tool cap, and Temporal retries each step three times, so the
         // worst case is 120 unbounded generations for one customer message.
         capturedOptions!.MaxOutputTokens.Should().Be(4000);
+        capturedOptions.ModelId.Should().Be(WorkflowConstants.ChatModelId);
         capturedOptions.Reasoning.Should().NotBeNull();
         capturedOptions.Reasoning!.Effort.Should().Be(ReasoningEffort.Low);
         capturedOptions.Reasoning.Output.Should().Be(ReasoningOutput.None);

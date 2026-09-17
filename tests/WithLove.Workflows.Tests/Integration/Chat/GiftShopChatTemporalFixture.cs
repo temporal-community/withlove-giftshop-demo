@@ -1,14 +1,24 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 using TemporalCommunity.Extensions.AI;
 using Temporalio.Common;
 using Temporalio.Extensions.Hosting;
 using WithLove.OpenInference;
+using WithLove.OpenInference.Spans;
 using WithLove.WorkflowServer.Telemetry;
 
 namespace WithLove.Workflows.Tests.Integration.Chat;
@@ -84,6 +94,7 @@ internal sealed class GiftShopChatWorkerHarness : IAsyncDisposable
         Func<DurableChatWorkflowInput, DurableChatWorkflowInput>? transformInput = null,
         HttpMessageHandler? productsHandler = null,
         OpenInferenceTraceConfig? traceConfig = null,
+        Uri? productsBaseAddress = null,
         string? taskQueue = null)
     {
         var targetHost = environment.Client.Connection.Options.TargetHost
@@ -103,10 +114,14 @@ internal sealed class GiftShopChatWorkerHarness : IAsyncDisposable
                 traceConfig ?? OpenInferenceTraceConfig.Default)).Build();
         builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
             new NoopEmbeddingGenerator());
-        builder.Services.AddHttpClient("productsApi", client =>
-                client.BaseAddress = new Uri("http://products.test"))
-            .ConfigurePrimaryHttpMessageHandler(
+        var productsClient = builder.Services.AddHttpClient("productsApi", client =>
+            client.BaseAddress = productsBaseAddress ?? new Uri("http://products.test"));
+
+        if (productsHandler is not null || productsBaseAddress is null)
+        {
+            productsClient.ConfigurePrimaryHttpMessageHandler(
                 () => productsHandler ?? new GiftShopProductsHandler());
+        }
 
         var worker = builder.Services
             .AddHostedTemporalWorker(
@@ -302,4 +317,84 @@ internal sealed class GiftShopProductsHandler : HttpMessageHandler
         """
         {"id":7,"name":"Keepsake Box","price":25.00,"categoryName":"Comfort","subCategory":"Keepsakes","description":"A handcrafted box.","imageUrl":"/images/7.jpg","stripePriceId":"price_7","materials":[{"name":"Wood"}],"storyTitle":"Made with care"}
         """;
+}
+
+/// <summary>
+/// Minimal ProductsAPI-shaped HTTP server that proves the actual HTTP client/server propagation
+/// path without adding database or embedding dependencies to the durable-chat trace test.
+/// </summary>
+internal sealed class TracingProductsServer : IAsyncDisposable
+{
+    private readonly WebApplication application;
+    private readonly TracerProvider tracerProvider;
+
+    private const string ProductJson =
+        """
+        {"id":7,"name":"Keepsake Box","price":25.00,"categoryName":"Comfort","subCategory":"Keepsakes","description":"A handcrafted box.","imageUrl":"/images/7.jpg","stripePriceId":"price_7","materials":[{"name":"Wood"}],"storyTitle":"Made with care"}
+        """;
+
+    private TracingProductsServer(
+        WebApplication application,
+        Uri baseUri,
+        TracerProvider tracerProvider,
+        ConcurrentQueue<string> baggageHeaders)
+    {
+        this.application = application;
+        BaseUri = baseUri;
+        this.tracerProvider = tracerProvider;
+        BaggageHeaders = baggageHeaders;
+    }
+
+    internal Uri BaseUri { get; }
+    internal ConcurrentQueue<string> BaggageHeaders { get; }
+
+    internal static async Task<TracingProductsServer> StartAsync(
+        ActivitySource activitySource,
+        ConcurrentBag<Activity> completedActivities,
+        ConcurrentBag<Activity> exportedAiActivities)
+    {
+        var baggageHeaders = new ConcurrentQueue<string>();
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Configuration.Sources.Clear();
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        builder.Services.AddOpenTelemetry()
+            .WithTracing(tracing => tracing
+                .AddAspNetCoreInstrumentation()
+                .AddSource(activitySource.Name)
+                .AddProcessor(new SimpleActivityExportProcessor(
+                    new CollectingActivityExporter(completedActivities)))
+                .AddProcessor(new Microsoft.Extensions.Hosting.AiTraceReparentProcessor())
+                .AddProcessor(new Microsoft.Extensions.Hosting.AiOnlyTraceExportProcessor(
+                    new CollectingActivityExporter(exportedAiActivities))));
+        var application = builder.Build();
+        application.MapGet("/api/products/search", (HttpContext context) =>
+        {
+            if (context.Request.Headers.TryGetValue("baggage", out var values))
+            {
+                foreach (var value in values)
+                    baggageHeaders.Enqueue(value!);
+            }
+
+            using var retriever = activitySource.StartRetriever("product.search");
+            retriever.Record([]);
+            return Results.Text($$"""{"value":[{{ProductJson}}]}""", "application/json");
+        });
+        await application.StartAsync();
+        var address = application.Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        return new TracingProductsServer(
+            application,
+            new Uri(address),
+            application.Services.GetRequiredService<TracerProvider>(),
+            baggageHeaders);
+    }
+
+    internal bool ForceFlush() => tracerProvider.ForceFlush();
+
+    public async ValueTask DisposeAsync()
+    {
+        await application.StopAsync();
+        await application.DisposeAsync();
+    }
 }

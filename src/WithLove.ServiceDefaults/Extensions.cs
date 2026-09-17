@@ -166,6 +166,7 @@ public static class Extensions
 
         var options = new OtlpExporterOptions();
         configure(options);
+        tracing.AddProcessor(new AiTraceReparentProcessor());
         tracing.AddProcessor(new AiOnlyTraceExportProcessor(new OtlpTraceExporter(options)));
     }
 
