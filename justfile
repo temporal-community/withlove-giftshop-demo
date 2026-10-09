@@ -1,4 +1,6 @@
-set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+[windows]
+set shell := ["pwsh.exe", "-NoLogo", "-Command"]
+[unix]
 set shell := ["bash", "-c"]
 
 solution        := "WithLoveShop.slnx"
