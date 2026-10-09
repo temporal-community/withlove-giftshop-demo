@@ -12,26 +12,26 @@
 
     <ItemGroup>
         <!-- Entity Framework Core -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
-<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
 
         <!-- Aspire Integration -->
-        <PackageReference Include="Aspire.Microsoft.EntityFrameworkCore.SqlServer" Version="13.5.3" />
+        <PackageReference Include="Aspire.Microsoft.EntityFrameworkCore.SqlServer" Version="13.6.1" />
 
         <!-- OpenAPI & Documentation -->
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-        <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
-        <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
-        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.0" />
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.10" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.16.15" />
-        <PackageReference Include="Scalar.AspNetCore.Microsoft" Version="2.16.15" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+        <PackageReference Include="Microsoft.OpenApi" Version="2.12.0" />
+        <PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.17.14" />
+        <PackageReference Include="Scalar.AspNetCore.Microsoft" Version="2.17.14" />
 
         <!-- Caching -->
-        <PackageReference Include="ZiggyCreatures.FusionCache" Version="2.6.0" />
-        <PackageReference Include="ZiggyCreatures.FusionCache.Backplane.StackExchangeRedis" Version="2.6.0" />
-        <PackageReference Include="ZiggyCreatures.FusionCache.OpenTelemetry" Version="2.6.0" />
-        <PackageReference Include="ZiggyCreatures.FusionCache.Serialization.SystemTextJson" Version="2.6.0" />
+        <PackageReference Include="ZiggyCreatures.FusionCache" Version="2.9.0" />
+        <PackageReference Include="ZiggyCreatures.FusionCache.Backplane.StackExchangeRedis" Version="2.9.0" />
+        <PackageReference Include="ZiggyCreatures.FusionCache.OpenTelemetry" Version="2.9.0" />
+        <PackageReference Include="ZiggyCreatures.FusionCache.Serialization.SystemTextJson" Version="2.9.0" />
 
     </ItemGroup>
 
