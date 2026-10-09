@@ -109,7 +109,6 @@ builder.Services.AddEmbeddingGenerator<string, Embedding<float>>(
     new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", openaiKey)
         .AsIEmbeddingGenerator());
 
-builder.Services.AddScoped<EmbeddingService>();
 
 builder.Services.AddScoped<IProductCacheService, ProductCacheService>();
 

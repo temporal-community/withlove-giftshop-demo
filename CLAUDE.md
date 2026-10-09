@@ -139,7 +139,7 @@ already excluded from both steps.
   workflow replay against a recorded history
 - **Prompt safety** — prompt-injection sanitization, and the fields `UserContext` is allowed to
   carry into append-only workflow history
-- **Cart** — quantity bounds and saturating arithmetic across both `ICartService` implementations,
+- **Cart** — quantity bounds and saturating arithmetic in `FusionCacheCartService`,
   anonymous-cart merge, persistence
 - **Products API** — ETags and conditional requests, RFC 9457 Problem Details, API version
   validation, error and response-header middleware, caching, hybrid-search RRF merge, pagination
@@ -197,12 +197,12 @@ This is a .NET Aspire distributed application using the XML-based `.slnx` soluti
 
 Components are organized by type in `src/WithLove.Web/Components/`:
 - **`Layout/`** — App shell: MainLayout, SiteHeader, SiteFooter
-- **`Shared/`** — Reusable UI components: ProductCard*, CategoryCircle, TrustBadge, QuantitySelector, Breadcrumb, Pagination, ChatFab, QuizOverlay, etc.
+- **`Shared/`** — Reusable UI components: ProductCard*, CategoryCircle, TrustBadge, QuantitySelector, Breadcrumb, ChatFab, QuizOverlay, etc.
 - **`Pages/`** — Routable pages: Home, CollectionPage, ProductDetail, Cart, Checkout (and their supporting sub-components)
 
 **Web models and services** live inside the `WithLove.Web` project itself — there is no `WithLove.Shared` project:
-- `src/WithLove.Web/Models/` (namespace `WithLove.Web.Models`) — Product, Category, CartItem, GiftEnhancement, CheckoutModel, OrderSummary, BreadcrumbItem, AccountModels, etc.
-- `src/WithLove.Web/Services/` (namespace `WithLove.Web.Services`) — IProductService, ICartService, FusionCacheCartService, InMemoryCartService, ChatService, ILoyaltyService, etc.
+- `src/WithLove.Web/Models/` (namespace `WithLove.Web.Models`) — Product, Category, CartItem, GiftEnhancement, CheckoutModel, BreadcrumbItem, AccountModels, etc.
+- `src/WithLove.Web/Services/` (namespace `WithLove.Web.Services`) — IProductService, ICartService, FusionCacheCartService, ChatService, ILoyaltyService, etc.
 - Cross-process contracts shared with the worker (chat request/turn state, workflow inputs) live in `src/WithLove.Workflows/`, not in a `Shared` project.
 
 ## Blazor Render Modes
@@ -219,7 +219,6 @@ Avoid WebAssembly for now; InteractiveServer components share scoped DI services
 ## State Management
 
 **Cart state** is managed by `ICartService` registered as **scoped** (one instance per SignalR circuit):
-- `InMemoryCartService` uses a `List<CartItem>` + `Action? OnChange` event
 - CartBadge, Cart, and Checkout pages subscribe to `OnChange` for UI updates
 - Gift enhancements are tracked as part of cart state
 - Scoped services ensure isolation between user circuits while allowing shared access within a circuit
@@ -279,14 +278,16 @@ Products matching neither strategy return empty results (not "10 closest neighbo
 
 **Blazor Integration** (`ChatService`):
 - Scoped service bridges Blazor UI ↔ Temporal workflow
-- Auth-based session IDs: `giftshop-chat-{userId}` or `giftshop-chat-anon-{guid}`
+- Auth-based session IDs: `giftshop-chat-{userId}` or `giftshop-chat-anon-{chatId}` from the persistent HttpOnly cookie
+- Anonymous chat identity rotates at login/logout; workflows start on the first message and closed histories are not hydrated
 - Builds a cart snapshot for each turn so durable tools can evaluate current cart state
 - Applies cart actions locally only when the workflow returns `FinalResponse`
 
 **UI** (`ChatFab.razor` + `ChatMessageContent.razor`):
 - FAB pill button (unchanged text "Chat with Love") toggles chat panel
 - Instant message display: user message + thinking indicator shown immediately before Temporal round-trip
-- Rich message rendering: markdown images `![alt](url)`, bold/italic, newlines, inline code
+- Rich message rendering: catalog-backed product cards and image fallbacks, bold/italic, newlines, inline code
+- Cart confirmation prose remains visible alongside product recommendations
 - Quick action buttons for common queries
 
 ## Terminology: Category vs. Collection
@@ -295,7 +296,7 @@ Products matching neither strategy return empty results (not "10 closest neighbo
 - **`Category`** = Internal/technical term used throughout C# code
   - Model: `WithLove.Web.Models.Category` (web/UI) and `WithLove.Data.Models.Category` (EF Core entity)
   - Service interface methods: `GetCategoryAsync()`, `GetCategoriesAsync()`, `GetProductsByCategoryAsync()`
-  - Component names: `CategoryCircle.razor`, `CategorySidebar.razor`
+  - Component names: `CategoryCircle.razor`
   - Variables: `category`, `categories`
   - Product properties: `CategoryId`, `CategoryName`, `SubCategory`
 

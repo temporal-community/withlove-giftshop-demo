@@ -23,18 +23,6 @@ namespace WithLove.ProductsAPI.Services
 {
     internal static partial class ProductApiServiceLogging
     {
-        [LoggerMessage(Level = LogLevel.Information, Message = "Generated embedding for product {ProductId}: {ProductName}")]
-        internal static partial void GeneratedProductEmbedding(this ILogger logger, int productId, string productName);
-
-        [LoggerMessage(Level = LogLevel.Information, Message = "All products already have embeddings")]
-        internal static partial void ProductsAlreadyEmbedded(this ILogger logger);
-
-        [LoggerMessage(Level = LogLevel.Information, Message = "Generating embeddings for {Count} products")]
-        internal static partial void GeneratingEmbeddings(this ILogger logger, int count);
-
-        [LoggerMessage(Level = LogLevel.Information, Message = "Generated embeddings for {Count} products")]
-        internal static partial void GeneratedEmbeddings(this ILogger logger, int count);
-
         [LoggerMessage(Level = LogLevel.Information, Message = "Invalidated cache for product {ProductId}")]
         internal static partial void InvalidatedProductCache(this ILogger logger, int productId);
 

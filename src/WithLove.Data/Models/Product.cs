@@ -74,7 +74,7 @@ public class Product
 
     /// <summary>
     /// Vector embedding for semantic search (1536 dimensions = text-embedding-3-small).
-    /// Null until embedding is generated via EmbeddingService.
+    /// Null until catalog setup generates the embedding.
     /// </summary>
     [Column(TypeName = "vector(1536)")]
     public SqlVector<float>? Embedding { get; set; }
