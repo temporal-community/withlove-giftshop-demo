@@ -85,7 +85,7 @@ Collect the following values before running Step 3:
 | `temporal-address` | Temporal Cloud → Namespace → gRPC endpoint (e.g. `your-ns.tmprl.cloud:7233`) |
 | `temporal-namespace` | Temporal Cloud → Namespace name (e.g. `your-ns.acct`) |
 | `temporal-api-key` | Temporal Cloud → API keys |
-| `stripe-webhook-secret` | Enter `whsec_placeholder` for now — replaced in Step 5 |
+| `stripe-webhook-secret` | Managed by `just deploy`; do not set it manually |
 
 > **Note:** `aspire secret set` stores values in the AppHost's local dev user secrets for `aspire run`. Those values are not read by `aspire deploy`. Use the interactive prompts (Step 3) or environment variables (see CI deploy section) to supply values to the deploy pipeline.
 
@@ -115,10 +115,7 @@ These attributes must exist before the workflowServer starts or workflow searche
 az login
 
 # Optional: preview the underlying Aspire steps without deploying
-aspire deploy \
-  --apphost src/WithLove.AppHost/WithLove.AppHost.csproj \
-  --environment azureprod \
-  --list-steps
+just deploy-preview
 
 # Recommended developer workflow
 just deploy
@@ -152,27 +149,29 @@ Aspire 13.5 fixes the earlier Azure SQL role script that could fail in `Invoke-S
 
 The AppHost therefore continues to disable the default SQL role assignments and deploy one repository-owned `sql-identity-access` Bicep resource instead. It acquires an Azure SQL token, uses the in-box `System.Data.SqlClient`, reconciles the shared identity's database user by SID, and grants `db_owner` idempotently. Remove this workaround only after verifying through published artifacts and a disposable Azure deployment that the default model emits one safe role-provisioning path for the shared identity.
 
-## Step 4 — Create the Stripe Event Destination
+## Step 4 — Stripe Event Destination automation
 
-The Stripe CLI container used in development is replaced by a Stripe Event Destination in production. This destination sends webhook events to shopSite.
+In production, the Stripe CLI container is replaced by a Stripe Event Destination. After Azure
+provisioning and the Redis health check succeed, `just deploy` reads the shopSite ingress URL,
+creates or reconciles the destination at `https://{shopsite-fqdn}/stripe/webhook`, records the
+signing secret in `.secrets.env`, installs it in Key Vault, restarts shopSite, and verifies that
+the local record and Key Vault agree. Do not create the destination or copy its signing secret
+manually; a failed run may already have created the endpoint.
 
-1. Go to **Stripe Dashboard -> Workbench -> Webhooks -> Create an event destination**
-2. Event source: **Your account**
-3. Payload format: **Snapshot** (preserves the v1 object format — no code changes needed)
-4. Subscribe to events: `checkout.session.completed`, `checkout.session.expired`
-5. Destination type: **Webhook endpoint**
-6. URL: `https://{your-shopsite-domain}/stripe/webhook`
-7. Save. On the destination detail page, click **"Click to reveal"** next to the signing secret and copy the `whsec_...` value.
-
-## Step 5 — Update the webhook secret and redeploy
-
-`aspire deploy` manages its own parameter cache (see Step 1) independently of `aspire secret set`. Running `aspire secret set` here would update the local dev user secrets — not the deploy cache — so the placeholder would remain and Stripe webhook verification would fail.
-
-Replace `Parameters__stripe_webhook_secret` in `.secrets.env`, then deploy:
+The deploying identity needs Key Vault secret `get` and `set` permissions (for example, the **Key
+Vault Secrets Officer** role). The preflight check leaves a non-sensitive
+`withlove-stripe-webhook-preflight` secret in the vault by design. If the Key Vault write fails,
+the secret remains recorded in `.secrets.env`; repair with:
 
 ```bash
-just deploy
+just install-stripe-webhook-secret
+just verify-stripe-webhook-secret
 ```
+
+Use `just ensure-stripe-webhook` to reconcile the destination manually. `just recreate-stripe-webhook`
+is recovery-only: it deletes and recreates the destination, causing a temporary webhook delivery
+gap while the new signing secret is installed. `just destroy` removes destinations tagged for the
+selected environment before tearing down Azure resources.
 
 The recipe sources `.secrets.env`, and the explicit value takes precedence over Aspire's cached parameter value. The deploy writes the updated secret to Key Vault and Container Apps picks it up.
 

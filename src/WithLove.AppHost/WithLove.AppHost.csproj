@@ -16,6 +16,7 @@
              pipeline step. Booting the AppHost to exercise it would need real secrets, so the
              test project calls it directly. -->
         <InternalsVisibleTo Include="WithLove.ProductsAPI.Tests" />
+        <InternalsVisibleTo Include="WithLove.StripeWebhooks.Tests" />
     </ItemGroup>
 
     <ItemGroup>
