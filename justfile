@@ -293,6 +293,11 @@ deploy environment="azureprod" reset_state="false":
         --environment "{{environment}}"
         --non-interactive
     )
+    if [[ "{{reset_state}}" == "true" ]]; then
+        # Clearing the local file above is not sufficient for every Aspire CLI cache path.
+        # Use the CLI's own environment-scoped cache reset as well.
+        deploy_args+=(--clear-cache)
+    fi
 
     max_attempts=3
     retry_delay_seconds=60
