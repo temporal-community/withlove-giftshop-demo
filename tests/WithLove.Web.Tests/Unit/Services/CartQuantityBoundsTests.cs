@@ -4,8 +4,8 @@ using ZiggyCreatures.Caching.Fusion;
 namespace WithLove.Web.Tests.Unit.Services;
 
 /// <summary>
-/// Bounds and saturating arithmetic for cart line quantities, at both the helper and the service
-/// level.
+/// Bounds and saturating arithmetic for cart line quantities, at both the helper and production
+/// service level.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,12 +19,6 @@ namespace WithLove.Web.Tests.Unit.Services;
 /// silently, and LINQ's <c>Sum</c> over <c>int</c> is <c>checked</c> — so a wrapped quantity turned
 /// <c>ItemCount</c>, a property read during render and on the checkout path, into a thrown
 /// <see cref="OverflowException"/> outside any exception handler.
-/// </para>
-/// <para>
-/// Both <see cref="ICartService"/> implementations are covered by the same theories. They must
-/// agree: <see cref="InMemoryCartService"/> is used as a test double for
-/// <see cref="FusionCacheCartService"/>, and a double that does not reproduce production bounds
-/// hides exactly this class of bug.
 /// </para>
 /// </remarks>
 public class CartQuantityBoundsTests
@@ -131,17 +125,14 @@ public class CartQuantityBoundsTests
 
     #endregion
 
-    #region Both ICartService implementations
+    #region FusionCacheCartService bounds
 
-    public static TheoryData<string> Implementations => new() { "in-memory", "fusion-cache" };
-
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task AddItemAsync_WithNegativeQuantity_ClampsToMinimum(string implementation)
+    public async Task AddItemAsync_WithNegativeQuantity_ClampsToMinimum()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
 
         // A model may emit any int it likes. -5 previously produced a negative line quantity and a
@@ -154,13 +145,12 @@ public class CartQuantityBoundsTests
         host.Service.Subtotal.Should().BePositive();
     }
 
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task AddItemAsync_WithExcessiveQuantity_ClampsToMaximum(string implementation)
+    public async Task AddItemAsync_WithExcessiveQuantity_ClampsToMaximum()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
 
         await host.Service.AddItemAsync(Item(1, quantity: int.MaxValue));
@@ -168,13 +158,12 @@ public class CartQuantityBoundsTests
         host.Service.Items.Should().ContainSingle().Which.Quantity.Should().Be(CartQuantity.Max);
     }
 
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task AddItemAsync_MergingIntoAnExistingLine_Saturates(string implementation)
+    public async Task AddItemAsync_MergingIntoAnExistingLine_Saturates()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
 
         // The original overflow: `existing.Quantity += item.Quantity` wrapped to a negative number,
@@ -189,14 +178,12 @@ public class CartQuantityBoundsTests
         host.Service.ItemCount.Should().Be(CartQuantity.Max);
     }
 
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task UpdateQuantityAsync_AboveMaximum_ClampsRatherThanRemoving(
-        string implementation)
+    public async Task UpdateQuantityAsync_AboveMaximum_ClampsRatherThanRemoving()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
         await host.Service.AddItemAsync(Item(1, quantity: 2));
 
@@ -205,13 +192,12 @@ public class CartQuantityBoundsTests
         host.Service.Items.Should().ContainSingle().Which.Quantity.Should().Be(CartQuantity.Max);
     }
 
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task UpdateQuantityAsync_AtOrBelowZero_StillRemovesTheLine(string implementation)
+    public async Task UpdateQuantityAsync_AtOrBelowZero_StillRemovesTheLine()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
         await host.Service.AddItemAsync(Item(1, quantity: 2));
 
@@ -223,13 +209,12 @@ public class CartQuantityBoundsTests
         host.Service.ItemCount.Should().Be(0);
     }
 
-    [Theory]
-    [MemberData(nameof(Implementations))]
+    [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Cart)]
-    public async Task UpdateQuantityAsync_Negative_StillRemovesTheLine(string implementation)
+    public async Task UpdateQuantityAsync_Negative_StillRemovesTheLine()
     {
-        await using var host = CartHost.For(implementation);
+        await using var host = CartHost.Create();
         await host.Service.InitializeAsync("bounds-user");
         await host.Service.AddItemAsync(Item(1, quantity: 2));
 
@@ -319,8 +304,7 @@ public class CartQuantityBoundsTests
     };
 
     /// <summary>
-    /// Owns whichever <see cref="ICartService"/> a theory case is exercising, plus the disposables
-    /// the FusionCache implementation needs.
+    /// Owns the production cart service and its disposable dependencies.
     /// </summary>
     private sealed class CartHost : IAsyncDisposable
     {
@@ -334,13 +318,8 @@ public class CartQuantityBoundsTests
 
         public ICartService Service { get; }
 
-        public static CartHost For(string implementation)
+        public static CartHost Create()
         {
-            if (implementation == "in-memory")
-            {
-                return new CartHost(new InMemoryCartService());
-            }
-
             var cache = new FusionCache(new FusionCacheOptions());
             var instrumentation = new Instrumentation();
             return new CartHost(

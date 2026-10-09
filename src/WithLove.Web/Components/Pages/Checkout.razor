@@ -15,6 +15,7 @@
 @inject ILoyaltyService LoyaltyService
 @inject IFusionCache FusionCache
 @inject WithLove.Web.Services.Instrumentation Instrumentation
+@inject ILogger<Checkout> Logger
 @implements IAsyncDisposable
 
 <PageTitle>Checkout | With Love</PageTitle>
@@ -384,12 +385,13 @@
                 couponId = coupon.Id;
             }
 
+            var returnUrl = $"{Navigation.BaseUri}order-confirmation?session_id={{CHECKOUT_SESSION_ID}}";
             var sessionOptions = new Stripe.Checkout.SessionCreateOptions
             {
-                UiMode = "custom",
+                UiMode = "elements",
                 Mode = "payment",
                 LineItems = lineItems,
-                ReturnUrl = $"{Navigation.BaseUri}order-confirmation?session_id={{CHECKOUT_SESSION_ID}}",
+                ReturnUrl = returnUrl,
                 Customer = stripeCustomerId,
                 // When no Stripe Customer is attached, pass the email explicitly so Stripe
                 // pre-fills and locks the email field in the Payment Element iframe.
@@ -422,8 +424,9 @@
 
             await CreateAndMountStripeSession(sessionOptions);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Stripe checkout session initialization failed");
             if (_redemptionId is not null && _currentUserId is not null)
             {
                 try

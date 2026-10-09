@@ -410,6 +410,10 @@ FodyWeavers.xsd
 .tmp/ 
 # playwright
 .playwright-mcp/
+.playwright-cli/
+
+.test-artifacts/
+.testagent/
 
 .plan/
 .mockups/

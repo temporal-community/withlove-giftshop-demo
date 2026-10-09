@@ -1,22 +1,22 @@
-@using System.Text.RegularExpressions
+@inject IProductService ProductService
 
-@foreach (var segment in ParseSegments(Text))
+@if (_segments.Count > 0)
 {
-    @if (segment.Type == SegmentType.Image)
+    @foreach (var rendered in _segments)
     {
-        <div class="my-2">
-            <img src="@segment.Url" alt="@segment.Alt"
-                 class="rounded-lg max-w-full max-h-48 object-cover border border-stone-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                 loading="lazy" />
-            @if (!string.IsNullOrEmpty(segment.Alt) && segment.Alt != segment.Url)
-            {
-                <span class="text-xs text-stone-400 mt-1 block">@segment.Alt</span>
-            }
-        </div>
-    }
-    else
-    {
-        @((MarkupString)FormatText(segment.Content))
+        var segment = rendered.Parsed;
+        @switch (segment.Type)
+        {
+            case ChatMessageContentParser.SegmentType.Product when rendered.CatalogProduct is { } product:
+                <div class="my-3">
+                    <ProductCardGrid Product="product" Compact="true" />
+                </div>
+                break;
+
+            default:
+                @((MarkupString)FormatText(segment.Content))
+                break;
+        }
     }
 }
 
@@ -24,117 +24,70 @@
     [Parameter, EditorRequired]
     public string Text { get; set; } = "";
 
-    private enum SegmentType { Text, Image }
+    private sealed record RenderedSegment(
+        ChatMessageContentParser.Segment Parsed,
+        WithLove.Web.Models.Product? CatalogProduct = null);
 
-    private record Segment(SegmentType Type, string Content, string? Url = null, string? Alt = null);
+    private IReadOnlyList<RenderedSegment> _segments = [];
+    private string? _loadedText;
 
-    // Matches markdown images: ![alt text](url)
-    private static readonly Regex MarkdownImageRegex = new(
-        @"!\[([^\]]*)\]\(([^)]+)\)",
-        RegexOptions.Compiled);
-
-    // Matches standalone image URLs on their own line
-    private static readonly Regex StandaloneImageUrlRegex = new(
-        @"^(https?://\S+\.(?:jpg|jpeg|png|gif|webp|svg|avif)(?:\?\S*)?)$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-    private static List<Segment> ParseSegments(string text)
+    protected override async Task OnParametersSetAsync()
     {
-        if (string.IsNullOrEmpty(text))
-            return [new Segment(SegmentType.Text, "")];
+        if (string.Equals(_loadedText, Text, StringComparison.Ordinal))
+            return;
 
-        var segments = new List<Segment>();
-        var remaining = text;
+        _loadedText = Text;
+        var parsed = ChatMessageContentParser.Parse(Text);
+        var productSegments = parsed
+            .Where(segment => segment.Type == ChatMessageContentParser.SegmentType.Product
+                && segment.Product is not null)
+            .ToArray();
 
-        // First pass: extract markdown images ![alt](url)
-        var mdMatches = MarkdownImageRegex.Matches(remaining);
-        var lastIndex = 0;
-
-        foreach (Match match in mdMatches)
+        if (productSegments.Length == 0)
         {
-            if (match.Index > lastIndex)
-            {
-                var before = remaining[lastIndex..match.Index];
-                AddTextOrImageSegments(segments, before);
-            }
-
-            segments.Add(new Segment(SegmentType.Image, "", Url: match.Groups[2].Value, Alt: match.Groups[1].Value));
-            lastIndex = match.Index + match.Length;
-        }
-
-        if (lastIndex < remaining.Length)
-        {
-            AddTextOrImageSegments(segments, remaining[lastIndex..]);
-        }
-        else if (segments.Count == 0)
-        {
-            segments.Add(new Segment(SegmentType.Text, text));
-        }
-
-        return segments;
-    }
-
-    /// <summary>
-    /// Checks remaining text for standalone image URLs (bare URLs on their own line).
-    /// </summary>
-    private static void AddTextOrImageSegments(List<Segment> segments, string text)
-    {
-        var imgMatches = StandaloneImageUrlRegex.Matches(text);
-
-        if (imgMatches.Count == 0)
-        {
-            if (!string.IsNullOrEmpty(text))
-                segments.Add(new Segment(SegmentType.Text, text));
+            _segments = parsed.Select(segment => new RenderedSegment(segment)).ToArray();
             return;
         }
 
-        var lastIndex = 0;
-        foreach (Match match in imgMatches)
+        IReadOnlyList<WithLove.Web.Models.Product> catalog;
+        try
         {
-            if (match.Index > lastIndex)
-            {
-                var before = text[lastIndex..match.Index];
-                if (!string.IsNullOrWhiteSpace(before))
-                    segments.Add(new Segment(SegmentType.Text, before));
-            }
-
-            segments.Add(new Segment(SegmentType.Image, "", Url: match.Groups[1].Value, Alt: ""));
-            lastIndex = match.Index + match.Length;
+            catalog = await ProductService.GetProductsAsync();
+        }
+        catch
+        {
+            catalog = [];
         }
 
-        if (lastIndex < text.Length)
+        if (!string.Equals(_loadedText, Text, StringComparison.Ordinal))
+            return;
+
+        _segments = parsed.Select(segment =>
         {
-            var after = text[lastIndex..];
-            if (!string.IsNullOrWhiteSpace(after))
-                segments.Add(new Segment(SegmentType.Text, after));
-        }
+            if (segment.Product is not { } product)
+                return new RenderedSegment(segment);
+
+            var canonical = ChatMessageContentParser.FindCatalogProduct(product, catalog);
+            return new RenderedSegment(segment, canonical);
+        }).ToArray();
     }
 
-    /// <summary>
-    /// Converts basic markdown formatting to HTML.
-    /// Handles: **bold**, *italic*, newlines, and inline `code`.
-    /// HTML-encodes all other content for safety.
-    /// </summary>
+    /// <summary>Formats ordinary assistant prose while keeping it HTML-encoded.</summary>
     private static string FormatText(string text)
     {
         if (string.IsNullOrEmpty(text))
             return "";
 
-        // HTML-encode first for safety
         var encoded = System.Net.WebUtility.HtmlEncode(text);
-
-        // Bold: **text**
-        encoded = Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
-
-        // Italic: *text* (but not inside bold)
-        encoded = Regex.Replace(encoded, @"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", "<em>$1</em>");
-
-        // Inline code: `code`
-        encoded = Regex.Replace(encoded, @"`(.+?)`", "<code class=\"bg-stone-100 px-1 py-0.5 rounded text-xs font-mono\">$1</code>");
-
-        // Line breaks
-        encoded = encoded.Replace("\n", "<br />");
-
-        return encoded;
+        encoded = System.Text.RegularExpressions.Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        encoded = System.Text.RegularExpressions.Regex.Replace(
+            encoded,
+            @"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)",
+            "<em>$1</em>");
+        encoded = System.Text.RegularExpressions.Regex.Replace(
+            encoded,
+            @"`(.+?)`",
+            "<code class=\"bg-stone-100 px-1 py-0.5 rounded text-xs font-mono\">$1</code>");
+        return encoded.Replace("\n", "<br />");
     }
 }

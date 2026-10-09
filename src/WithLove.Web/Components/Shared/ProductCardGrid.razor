@@ -1,10 +1,12 @@
-<a href="/product/@Product.Id" class="group cursor-pointer flex flex-col h-full bg-white rounded-2xl p-4 border border-stone-100 shadow-sm hover:shadow-lg transition-all duration-300">
-    <div class="relative overflow-hidden rounded-xl mb-6 aspect-[4/5] bg-stone-100 w-full">
-        <img alt="@Product.Name" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="@Product.ImageUrl" />
+<a href="/product/@Product.Id" class="group cursor-pointer flex flex-col h-full bg-white border border-stone-100 shadow-sm hover:shadow-lg transition-all duration-300 @(Compact ? "rounded-xl p-3" : "rounded-2xl p-4")">
+    <div class="relative overflow-hidden rounded-xl bg-stone-100 w-full @(Compact ? "mb-3 aspect-[16/9]" : "mb-6 aspect-[4/5]")">
+        <ProductImage Source="@Product.ImageUrl"
+                      Alt="@Product.Name"
+                      ImageClass="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
     </div>
     <div class="flex flex-col flex-grow text-center">
-        <h3 class="font-display text-lg text-stone-800 group-hover:text-primary transition-colors">@Product.Name</h3>
-        <p class="text-sm text-stone-500 mt-1 font-light">@Product.Description</p>
+        <h3 class="font-display text-stone-800 group-hover:text-primary transition-colors @(Compact ? "text-base" : "text-lg")">@Product.Name</h3>
+        <p class="text-stone-500 mt-1 font-light @(Compact ? "text-xs" : "text-sm")">@Product.Description</p>
         <div class="mt-auto pt-4 border-t border-stone-50">
             <span class="block text-stone-800 font-medium">@Product.Price.ToString("C")</span>
         </div>
@@ -13,4 +15,5 @@
 
 @code {
     [Parameter, EditorRequired] public Product Product { get; set; } = default!;
+    [Parameter] public bool Compact { get; set; }
 }

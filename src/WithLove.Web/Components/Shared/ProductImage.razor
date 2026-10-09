@@ -1,0 +1,29 @@
+@if (_loadState.ShouldRender(Source))
+{
+    <img src="@Source"
+         alt="@Alt"
+         class="@ImageClass"
+         loading="@Loading"
+         @onerror="HandleImageError" />
+}
+else
+{
+    <div class="@PlaceholderClass"
+         role="img"
+         aria-label="Image unavailable for @Alt">
+        <span class="material-symbols-outlined text-3xl" aria-hidden="true">image</span>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Source { get; set; }
+    [Parameter, EditorRequired] public string Alt { get; set; } = "";
+    [Parameter, EditorRequired] public string ImageClass { get; set; } = "";
+    [Parameter] public string PlaceholderClass { get; set; } =
+        "flex h-full w-full items-center justify-center bg-stone-100 text-stone-300";
+    [Parameter] public string Loading { get; set; } = "lazy";
+
+    private readonly ProductImageLoadState _loadState = new();
+
+    private void HandleImageError() => _loadState.MarkFailed();
+}

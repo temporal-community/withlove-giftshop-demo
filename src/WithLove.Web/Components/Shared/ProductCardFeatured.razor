@@ -2,7 +2,10 @@
     @if (ImageOnLeft)
     {
         <div class="relative overflow-hidden h-[600px] order-1 md:order-1 rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none">
-            <img alt="@Product.Name" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" src="@Product.ImageUrl" />
+            <ProductImage Source="@Product.ImageUrl"
+                          Alt="@Product.Name"
+                          ImageClass="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                          Loading="eager" />
             <div class="absolute inset-0 bg-black/10"></div>
         </div>
         @ProductInfo
@@ -11,7 +14,10 @@
     {
         @ProductInfo
         <div class="relative overflow-hidden h-[600px] order-1 md:order-2 rounded-t-2xl md:rounded-r-2xl md:rounded-tl-none">
-            <img alt="@Product.Name" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" src="@Product.ImageUrl" />
+            <ProductImage Source="@Product.ImageUrl"
+                          Alt="@Product.Name"
+                          ImageClass="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                          Loading="eager" />
             <div class="absolute inset-0 bg-black/10"></div>
         </div>
     }

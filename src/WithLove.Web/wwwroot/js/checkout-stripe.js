@@ -1,11 +1,10 @@
-// Stripe Custom Checkout integration for Blazor.
+// Stripe Elements integration for Blazor.
 // Called via JS interop from Checkout.razor (InteractiveServer render mode).
 //
-// Uses Stripe's Custom Checkout flow (stripe.initCheckout) rather than the
-// prebuilt Checkout page, giving full control over the payment UI while
-// Stripe handles PCI-sensitive field rendering inside iframes.
+// Uses the Checkout Sessions + Elements flow, giving full control over the
+// payment UI while Stripe handles PCI-sensitive field rendering inside iframes.
 //
-// Docs: https://docs.stripe.com/custom-checkout/overview
+// Docs: https://docs.stripe.com/elements/overview
 // Appearance API: https://docs.stripe.com/elements/appearance-api
 
 window.StripeCheckout = {
@@ -18,7 +17,7 @@ window.StripeCheckout = {
     // Called once from Checkout.razor after the Blazor circuit is established.
     //
     // The clientSecret comes from a server-side Stripe Checkout Session
-    // created with ui_mode: "custom" (see CreateAndMountStripeSession in Checkout.razor).
+    // created with ui_mode: "elements" (see CreateAndMountStripeSession in Checkout.razor).
     init: async function (publishableKey, clientSecret) {
         const stripe = Stripe(publishableKey);
 
@@ -88,9 +87,9 @@ window.StripeCheckout = {
                 },
             },
         };
-        const checkout = await stripe.initCheckout({
+        const checkout = stripe.initCheckoutElementsSdk({
             clientSecret: clientSecret,
-            elementsOptions: {appearance}
+            elementsOptions: {appearance: appearance}
         });
 
         // Payment Element: renders card/wallet inputs inside a Stripe-hosted iframe.
@@ -98,13 +97,9 @@ window.StripeCheckout = {
         const paymentElement = checkout.createPaymentElement();
         paymentElement.mount('#payment-element');
 
-        // Shipping Address Element: provides address autocomplete (25+ countries)
-        // and syncs collected data directly into the Checkout Session — no manual
-        // updateShippingAddress() call needed on confirm.
+        // Shipping Address Element: provides address autocomplete and passes the
+        // collected address to Stripe when the Payment Element is confirmed.
         // Mounts into #shipping-address-element defined in Checkout.razor Step 1.
-        // Note: createShippingAddressElement() accepts NO options (unlike
-        // elements.create("address", ...) in the Elements API). Allowed countries
-        // are configured server-side via ShippingAddressCollection on the Session.
         const addressElement = checkout.createShippingAddressElement();
         addressElement.mount('#shipping-address-element');
 
@@ -116,11 +111,9 @@ window.StripeCheckout = {
     // Confirms the payment. Called from HandleValidSubmit in Checkout.razor
     // after Blazor-side form validation passes.
     //
-    // loadActions() resolves available actions for the current session state.
-    // actions.confirm() triggers Stripe's client-side validation on all mounted
-    // Elements (address + payment). If validation fails, Stripe shows inline
-    // errors and returns an error object. On success, Stripe auto-redirects
-    // to the return_url configured on the Checkout Session (order-confirmation page).
+    // loadActions() resolves the Checkout Session actions. actions.confirm()
+    // validates all mounted Elements, confirms the session, and redirects to the
+    // return_url configured on the session when additional customer action is needed.
     //
     // Returns { success: bool, error: string|null } for Blazor interop.
     confirm: async function () {
@@ -133,10 +126,13 @@ window.StripeCheckout = {
                 return { success: false, error: 'failed to load actions' };
             }
 
-            const error = await actions.confirm();
+            const confirmResult = await actions.confirm();
 
-            if (error) {
-                return { success: false, error: error.message };
+            if (confirmResult.type === 'error') {
+                return { success: false, error: confirmResult.error.message };
+            }
+            if (confirmResult.type !== 'success') {
+                return { success: false, error: 'Payment confirmation returned an unexpected result.' };
             }
             return { success: true, error: null };
         } catch (e) {
@@ -156,8 +152,6 @@ window.StripeCheckout = {
             this._paymentElement.destroy();
             this._paymentElement = null;
         }
-        if (this._checkout) {
-            this._checkout = null;
-        }
+        this._checkout = null;
     }
 };
