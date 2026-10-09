@@ -34,7 +34,7 @@ Web is declaration-only. `AddGiftShopChatWorkflowClient` registers the durable w
 factory and all 13 model-visible tool declarations. Web does not host tool implementations and does
 not put tools in `ChatOptions.Tools`.
 
-workflowServer calls `AddGiftShopChatWorker`. It registers `AddDurableAI`, the concrete GiftShop
+workflowServer calls `ConfigureGiftShopChatWorker`. It registers `AddDurableAI`, the concrete GiftShop
 workflow, the same declarations, and scoped implementation factories. The provider `IChatClient`
 is intentionally bare; it must not use MEAI `UseFunctionInvocation()` because the durable package
 owns function invocation.
@@ -216,10 +216,14 @@ durable history without being shown verbatim in the UI.
 at four entries. The local cap prevents an unexpectedly oversized provider response from consuming
 the model context even if the API ignores its `top=4` request.
 
-Authenticated workflow IDs use `giftshop-chat-{userId}`. Anonymous sessions use a new
-`giftshop-chat-anon-{guid}` ID. Starts use `WorkflowIdConflictPolicy.UseExisting` for an active
-session and `WorkflowIdReusePolicy.AllowDuplicate` after a closed session. This is a sample, so old
-`ChatAgentWorkflow` executions are not migrated.
+Authenticated workflow IDs use `giftshop-chat-{userId}`. Anonymous sessions use
+`giftshop-chat-anon-{chatId}`, where the `wl-chat-id` HttpOnly cookie preserves the identity across
+reloads and circuit reconnects. Login and logout rotate that cookie and attempt to shut down the
+previous anonymous run. Opening the panel only loads history; the first message starts the workflow.
+History queries reject closed runs, and End Chat waits for shutdown within a five-second budget
+before clearing the visible transcript. Starts use `WorkflowIdConflictPolicy.UseExisting` for an
+active session and `WorkflowIdReusePolicy.AllowDuplicate` after a closed session. This is a sample,
+so old `ChatAgentWorkflow` executions are not migrated.
 
 ## Wire-format compatibility and the rollback one-way door
 

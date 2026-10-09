@@ -20,6 +20,7 @@ public class Instrumentation : IDisposable
     public Counter<long> ChatTokensUsed { get; }
     public Histogram<long> ChatTurnTokens { get; }
     public Counter<long> ChatTurnsWithoutUsage { get; }
+    public Counter<long> ChatSessionIdentityFailures { get; }
 
     public Instrumentation()
     {
@@ -76,6 +77,18 @@ public class Instrumentation : IDisposable
             "chat.turn.usage_unreported",
             description: "Durable chat turns that returned no token usage, by completion reason — "
                          + "tokens these turns spent are absent from chat.turn.tokens");
+
+        // Stable anonymous chat identity is delivered entirely by the wl-chat-id cookie reaching
+        // the circuit. If that wiring breaks — middleware unregistered, the persistent-state
+        // registration dropped, a consent gate suppressing the cookie — the feature reverts to a
+        // fresh workflow per visitor, and the tempting "just mint a GUID" fallback would make that
+        // reversion completely invisible. ChatService throws instead, and this counter is what
+        // reports it: zero in a healthy system, non-zero exactly when resume has stopped working.
+        // A log line is not a report.
+        ChatSessionIdentityFailures = Meter.CreateCounter<long>(
+            "chat.session.identity_failures",
+            description: "Chat sessions that could not be started because the anonymous chat "
+                         + "identity was missing — the stable-identity wiring is broken");
     }
 
     public void Dispose()

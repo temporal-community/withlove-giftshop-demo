@@ -64,6 +64,75 @@ internal sealed class GiftShopChatToolService(IHttpClientFactory httpClientFacto
         return SummarizeProductList(json);
     }
 
+    /// <summary>
+    /// Resolves a model-supplied category ID to its collection name, or reports that no such
+    /// collection exists.
+    /// </summary>
+    /// <param name="categoryId">The category ID the model asked to navigate to.</param>
+    /// <param name="cancellationToken">Cancels the ProductsAPI lookup.</param>
+    /// <returns>
+    /// The collection name when the category exists (possibly empty if it is unnamed), or
+    /// <see langword="null"/> when ProductsAPI reports it does not exist.
+    /// </returns>
+    /// <remarks>
+    /// Every other tool that takes an ID already fetches the resource, so a hallucinated ID
+    /// degrades to a "no such thing" string. <c>navigate_to_collection</c> was the exception: it
+    /// only ever built a URL, so an invented ID became a real navigation to a dead route. This is
+    /// the backstop that closes that gap, which is why the lookup exists purely to be checked —
+    /// the name it returns is a bonus that lets the confirmation message name the collection.
+    /// </remarks>
+    public async Task<string?> FindCategoryNameAsync(
+        int categoryId,
+        CancellationToken cancellationToken)
+    {
+        var http = httpClientFactory.CreateClient("productsApi");
+        var response = await http.GetAsync($"/api/categories/{categoryId}", cancellationToken);
+
+        if (IsResourceMissing(response, "navigate_to_collection"))
+            return null;
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("name", out var name)
+            ? name.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// Resolves a model-supplied product ID to its product name, or reports that no such product
+    /// exists.
+    /// </summary>
+    /// <param name="productId">The product ID the model asked to navigate to.</param>
+    /// <param name="cancellationToken">Cancels the ProductsAPI lookup.</param>
+    /// <returns>
+    /// The product name when the product exists (possibly empty if it is unnamed), or
+    /// <see langword="null"/> when ProductsAPI reports it does not exist.
+    /// </returns>
+    /// <remarks>
+    /// The product-side twin of <see cref="FindCategoryNameAsync"/>, and it closes the same gap.
+    /// <c>get_product_details</c> and <c>add_to_cart</c> fetch the product, so a hallucinated ID
+    /// degrades to a "no such product" string; <c>navigate_to_product</c> only ever interpolated
+    /// the ID into <c>/product/{id}</c>, which cannot fail — it just lands the customer on a dead
+    /// route. Unlike collections there is no degenerate ID here: <c>/product</c> is not a route, so
+    /// every ID goes through this lookup rather than being special-cased.
+    /// </remarks>
+    public async Task<string?> FindProductNameAsync(
+        int productId,
+        CancellationToken cancellationToken)
+    {
+        var http = httpClientFactory.CreateClient("productsApi");
+        var response = await http.GetAsync($"/api/products/{productId}", cancellationToken);
+
+        if (IsResourceMissing(response, "navigate_to_product"))
+            return null;
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("name", out var name)
+            ? name.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
     public async Task<AddToCartToolResult> BuildAddToCartAsync(
         int productId,
         int quantity,
@@ -241,9 +310,6 @@ internal sealed class GiftShopChatToolService(IHttpClientFactory httpClientFacto
         var category = product.TryGetProperty("categoryName", out var categoryElement)
             ? categoryElement.GetString() ?? string.Empty
             : string.Empty;
-        var imageUrl = product.TryGetProperty("imageUrl", out var image)
-            ? image.GetString() ?? string.Empty
-            : string.Empty;
         var subCategory = product.TryGetProperty("subCategory", out var subCategoryElement)
             ? subCategoryElement.GetString() ?? string.Empty
             : string.Empty;
@@ -253,9 +319,10 @@ internal sealed class GiftShopChatToolService(IHttpClientFactory httpClientFacto
 
         if (!detailed)
         {
+            var shortDescription = LimitDescription(description);
             return $"- ID: {id} | {name} | ${price:F2} | {category}" +
                    (string.IsNullOrEmpty(subCategory) ? string.Empty : $" > {subCategory}") +
-                   (string.IsNullOrEmpty(imageUrl) ? string.Empty : $" | Image: {imageUrl}");
+                   (string.IsNullOrEmpty(shortDescription) ? string.Empty : $" | Description: {shortDescription}");
         }
 
         var lines = new List<string>
@@ -269,8 +336,6 @@ internal sealed class GiftShopChatToolService(IHttpClientFactory httpClientFacto
 
         if (!string.IsNullOrEmpty(description))
             lines.Add($"Description: {description}");
-        if (!string.IsNullOrEmpty(imageUrl))
-            lines.Add($"Image: {imageUrl}");
 
         if (product.TryGetProperty("materials", out var materials) && materials.GetArrayLength() > 0)
         {
@@ -291,6 +356,16 @@ internal sealed class GiftShopChatToolService(IHttpClientFactory httpClientFacto
         }
 
         return string.Join("\n", lines);
+    }
+
+    private static string LimitDescription(string description)
+    {
+        const int maxLength = 180;
+        if (description.Length <= maxLength)
+            return description;
+
+        var cutoff = description[..maxLength].LastIndexOf(' ');
+        return $"{description[..(cutoff > 0 ? cutoff : maxLength)].TrimEnd()}…";
     }
 
     internal static string SummarizeCategoryList(string json)

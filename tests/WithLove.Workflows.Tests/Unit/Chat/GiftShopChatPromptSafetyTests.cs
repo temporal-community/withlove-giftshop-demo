@@ -17,6 +17,19 @@ namespace WithLove.Workflows.Tests.Unit.Chat;
 /// </remarks>
 public class GiftShopChatPromptSafetyTests
 {
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public void BuildInstructions_PrioritizesAContextualResponseBeforeAClarifyingQuestion()
+    {
+        var instructions = GiftShopChatPrompt.BuildInstructions(null);
+
+        instructions.Should().Contain(
+            "Respond to the message in front of you before deciding whether to ask a question.");
+        instructions.Should().Contain("Do not turn a clear preference into another discovery question.");
+        instructions.Should().Contain("Never ask a question merely to keep the conversation going.");
+    }
+
     #region Finding 16 — customer email must not reach durable history
 
     [Fact]

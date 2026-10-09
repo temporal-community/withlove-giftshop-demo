@@ -145,6 +145,25 @@ public class AnonymousCartMiddlewareTests
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Middleware)]
+    public async Task NoCookie_CookieIsSecure()
+    {
+        var middleware = CreateMiddleware();
+        var context = CreateHttpContext();
+
+        await middleware.InvokeAsync(context, _session);
+
+        // Deliberate, and the same decision wl-chat-id carries: both anonymous identifiers are
+        // bearer values, so neither may travel over plaintext. Pinned because the flag encodes a
+        // decision rather than an implementation detail — without this assertion it can be deleted
+        // silently, and the failure would appear as anonymous carts emptying on every request over
+        // a non-loopback http origin rather than as anything resembling a cookie problem.
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain("secure", Exactly.Once());
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Middleware)]
     public async Task NoCookie_CookieHasExpiry()
     {
         var middleware = CreateMiddleware();

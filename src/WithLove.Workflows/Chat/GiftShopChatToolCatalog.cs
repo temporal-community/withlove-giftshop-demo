@@ -162,12 +162,14 @@ public static class GiftShopChatToolCatalog
     private static Task<string> ClearCartDeclarationAsync() => Task.FromResult(string.Empty);
 
     private static Task<string> NavigateToProductDeclarationAsync(
-        [Description("The product ID to navigate to")] int productId) =>
+        [Description("The product ID to navigate to")] int productId,
+        CancellationToken cancellationToken = default) =>
         Task.FromResult(string.Empty);
 
     private static Task<string> NavigateToCollectionDeclarationAsync(
         [Description("Numeric category ID from get_categories results. Use 0 only to show all collections.")]
-        int categoryId = 0) =>
+        int categoryId = 0,
+        CancellationToken cancellationToken = default) =>
         Task.FromResult(string.Empty);
 
     private static Task<string> NavigateToCartDeclarationAsync() => Task.FromResult(string.Empty);
@@ -278,23 +280,66 @@ public static class GiftShopChatToolCatalog
             return Task.FromResult("Cart has been emptied.");
         }
 
-        public Task<string> NavigateToProductAsync(
-            [Description("The product ID to navigate to")] int productId) =>
-            AddNavigationAsync(
-                new NavigationAction(NavigationTarget.Product, $"/product/{productId}"),
-                $"Navigating to product {productId} page.");
-
-        public Task<string> NavigateToCollectionAsync(
-            [Description("Numeric category ID from get_categories results. Use 0 only to show all collections.")]
-            int categoryId = 0)
+        /// <summary>Navigates to a product detail page after confirming the product exists.</summary>
+        /// <remarks>
+        /// Same gap, same fix as <see cref="NavigateToCollectionAsync"/>: a model-supplied ID is
+        /// untrusted input, and interpolating it into <c>/product/{id}</c> cannot fail, so an
+        /// invented ID used to become a real navigation to a dead route. There is no degenerate ID
+        /// to special-case here — <c>/product</c> without an ID is not a route — so every ID is
+        /// resolved, and an unknown one becomes a correctable answer rather than a broken page.
+        /// </remarks>
+        public async Task<string> NavigateToProductAsync(
+            [Description("The product ID to navigate to")] int productId,
+            CancellationToken cancellationToken = default)
         {
-            var url = categoryId > 0 ? $"/collections/{categoryId}" : "/collections";
-            var message = categoryId > 0
-                ? $"Navigating to collection {categoryId}."
-                : "Navigating to all collections.";
-            return AddNavigationAsync(
-                new NavigationAction(NavigationTarget.Collection, url),
-                message);
+            var name = await service.FindProductNameAsync(productId, cancellationToken);
+            if (name is null)
+            {
+                return $"There is no product with ID {productId}, so nothing was opened. " +
+                       "Verify the product ID from search results.";
+            }
+
+            return await AddNavigationAsync(
+                new NavigationAction(NavigationTarget.Product, $"/product/{productId}"),
+                string.IsNullOrEmpty(name)
+                    ? $"Navigating to product {productId} page."
+                    : $"Navigating to the {name} page.");
+        }
+
+        /// <summary>Navigates to a collection page, or to the collections index for ID 0.</summary>
+        /// <remarks>
+        /// The ID is verified against ProductsAPI before any navigation is recorded. A model-supplied
+        /// ID is untrusted input, and unlike <c>add_to_cart</c> or <c>browse_category</c> — which
+        /// fetch the resource and so degrade to an error string on a bad ID — building a URL from it
+        /// unchecked cannot fail, it just lands the customer on a dead route. Verifying here means an
+        /// invented ID becomes a correctable answer the model can act on instead of a broken page.
+        /// </remarks>
+        public async Task<string> NavigateToCollectionAsync(
+            [Description("Numeric category ID from get_categories results. Use 0 only to show all collections.")]
+            int categoryId = 0,
+            CancellationToken cancellationToken = default)
+        {
+            // Documented contract: 0 (and anything non-positive) means "show every collection",
+            // which is a real route and needs no lookup.
+            if (categoryId <= 0)
+            {
+                return await AddNavigationAsync(
+                    new NavigationAction(NavigationTarget.Collection, "/collections"),
+                    "Navigating to all collections.");
+            }
+
+            var name = await service.FindCategoryNameAsync(categoryId, cancellationToken);
+            if (name is null)
+            {
+                return $"There is no collection with ID {categoryId}, so nothing was opened. " +
+                       "Call get_categories for valid IDs.";
+            }
+
+            return await AddNavigationAsync(
+                new NavigationAction(NavigationTarget.Collection, $"/collections/{categoryId}"),
+                string.IsNullOrEmpty(name)
+                    ? $"Navigating to collection {categoryId}."
+                    : $"Navigating to the {name} collection.");
         }
 
         public Task<string> NavigateToCartAsync() =>

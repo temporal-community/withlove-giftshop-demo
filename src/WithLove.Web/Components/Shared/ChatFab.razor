@@ -45,7 +45,20 @@ else
 
         <!-- Messages -->
         <div class="h-96 p-4 overflow-y-auto no-scrollbar flex flex-col gap-4" @ref="_messagesContainer">
-            @if (ChatService.Messages.Count == 0 && !ChatService.IsThinking)
+            @if (_sessionUnavailable)
+            {
+                <!-- The session could not be established. Say so rather than presenting an empty
+                     panel that looks like a working chat and fails at the first send. -->
+                <div class="flex gap-3" data-chat-unavailable>
+                    <div class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0 mt-1">
+                        <span class="material-symbols-outlined text-stone-400 text-sm">cloud_off</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl rounded-tl-none border border-stone-100 shadow-sm text-sm text-stone-500 leading-relaxed max-w-[85%]">
+                        Chat is unavailable right now. Please close this panel and try again in a moment.
+                    </div>
+                </div>
+            }
+            else if (ChatService.Messages.Count == 0 && !ChatService.IsThinking)
             {
                 <!-- Welcome message + quick actions -->
                 <div class="flex gap-3">
@@ -58,13 +71,13 @@ else
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
-                                    @onclick="() => SendQuickAction(QuickActionRomantic)">Romantic Gift</button>
+                                    @onclick="() => SendQuickAction(QuickActionRomantic)" disabled="@_isOpening">Romantic Gift</button>
                             <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
-                                    @onclick="() => SendQuickAction(QuickActionSympathy)">Sympathy</button>
+                                    @onclick="() => SendQuickAction(QuickActionSympathy)" disabled="@_isOpening">Sympathy</button>
                             <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
-                                    @onclick="() => SendQuickAction(QuickActionJustBecause)">Just Because</button>
+                                    @onclick="() => SendQuickAction(QuickActionJustBecause)" disabled="@_isOpening">Just Because</button>
                             <button class="px-3 py-1.5 bg-white border border-stone-200 hover:border-primary hover:text-primary text-xs text-stone-500 rounded-full transition-colors duration-300"
-                                    @onclick="() => SendQuickAction(QuickActionSelfCare)">Self-Care</button>
+                                    @onclick="() => SendQuickAction(QuickActionSelfCare)" disabled="@_isOpening">Self-Care</button>
                         </div>
                     </div>
                 </div>
@@ -123,10 +136,10 @@ else
                        @bind="_currentMessage"
                        @bind:event="oninput"
                        @onkeydown="HandleKeyDown"
-                       disabled="@ChatService.IsThinking"/>
+                       disabled="@(_isOpening || ChatService.IsThinking || _sessionUnavailable)"/>
                 <button class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary-dark transition-colors shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                         @onclick="SendMessage"
-                        disabled="@(ChatService.IsThinking || string.IsNullOrWhiteSpace(_currentMessage))">
+                        disabled="@(_isOpening || ChatService.IsThinking || _sessionUnavailable || string.IsNullOrWhiteSpace(_currentMessage))">
                     <span class="material-symbols-outlined text-sm">send</span>
                 </button>
             </div>
@@ -141,6 +154,8 @@ else
     private const string QuickActionSelfCare = "Show me self-care gifts";
 
     private bool _isOpen;
+    private bool _isOpening;
+    private bool _sessionUnavailable;
     private string _currentMessage = "";
     private ElementReference _messagesContainer;
     private ElementReference _scrollAnchor;
@@ -158,23 +173,32 @@ else
     private async Task OpenChat()
     {
         _isOpen = true;
+        _isOpening = true;
         _needsScrollToBottom = true;
+        _sessionUnavailable = false;
 
         try
         {
             await ChatService.InitializeAsync();
 
-            // Order matters. EnsureWorkflowStartedAsync uses IdReusePolicy.AllowDuplicate, so
-            // calling it first starts a fresh, empty run and the previous run's transcript is no
-            // longer reachable by a query. Hydrating first salvages the last readable history.
+            // No start call here. The workflow starts lazily inside SendMessageAsync, so a visitor
+            // who opens the panel and never types creates nothing in Temporal. Hydration handles
+            // both of the resulting cases on its own: a never-started session comes back NotFound,
+            // and a closed one is refused by the NotOpen reject condition. Either way the panel is
+            // empty, which is exactly what the model will see on the next turn.
             await ChatService.LoadHistoryAsync();
-            await ChatService.EnsureWorkflowStartedAsync();
         }
         catch (Exception exception)
         {
-            // Temporal being unreachable must not tear down the circuit. The panel still opens;
-            // the first send will surface the fallback if the session is genuinely unavailable.
-            Logger.LogError(exception, "Could not hydrate the chat session. Opening the panel anyway.");
+            // Temporal being unreachable, or the anonymous chat identity failing to reach the
+            // circuit, must not tear down the circuit. Surface it as an unavailable panel rather
+            // than an empty one that looks like a working chat and fails at the first send.
+            _sessionUnavailable = true;
+            Logger.LogError(exception, "Could not open the chat session.");
+        }
+        finally
+        {
+            _isOpening = false;
         }
     }
 
@@ -195,6 +219,8 @@ else
         }
 
         _currentMessage = "";
+        _isOpen = false;
+        _sessionUnavailable = false;
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -209,7 +235,11 @@ else
     {
         // Checked again here so a stray invoke while a turn is in flight does not discard
         // whatever the customer has typed. SendTurnAsync holds the authoritative guard.
-        if (string.IsNullOrWhiteSpace(_currentMessage) || ChatService.IsThinking) return;
+        if (_isOpening || ChatService.IsThinking || _sessionUnavailable
+            || string.IsNullOrWhiteSpace(_currentMessage))
+        {
+            return;
+        }
 
         var message = _currentMessage.Trim();
         _currentMessage = "";
@@ -219,6 +249,11 @@ else
 
     private async Task SendQuickAction(string message)
     {
+        if (_isOpening || ChatService.IsThinking || _sessionUnavailable)
+        {
+            return;
+        }
+
         _currentMessage = "";
 
         await SendTurnAsync(message);
@@ -230,7 +265,9 @@ else
     /// </summary>
     private async Task SendTurnAsync(string message)
     {
-        if (ChatService.IsThinking) return;
+        // The composer is disabled while initialization is in progress or the session is
+        // unavailable. This remains the authoritative guard so a stray invoke cannot dispatch.
+        if (_isOpening || ChatService.IsThinking || _sessionUnavailable) return;
 
         // Show user message + thinking indicator immediately
         ChatService.Messages.Add(new ChatHistoryEntry(true, message, DateTime.UtcNow));

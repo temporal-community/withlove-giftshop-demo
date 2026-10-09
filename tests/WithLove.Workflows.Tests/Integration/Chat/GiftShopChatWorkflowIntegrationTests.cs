@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.AI;
@@ -8,7 +10,6 @@ using OpenTelemetry;
 using OpenTelemetry.Trace;
 using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
-using Temporalio.Client;
 using WithLove.Web.Models;
 using WithLove.WorkflowServer.Services;
 using WebChatService = WithLove.Web.Services.ChatService;
@@ -16,6 +17,7 @@ using WebGiftShopChatWorkflowClient = WithLove.Web.Services.GiftShopChatWorkflow
 using WebInstrumentation = WithLove.Web.Services.Instrumentation;
 using WebWorkflowClient = WithLove.Web.Services.IGiftShopChatWorkflowClient;
 using WebCartService = WithLove.Web.Services.ICartService;
+using WebAnonymousChatSession = WithLove.Web.Services.AnonymousChatSession;
 
 namespace WithLove.Workflows.Tests.Integration.Chat;
 
@@ -232,17 +234,10 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             chatClient);
         var workflowId = $"giftshop-chat-limit-{Guid.NewGuid():N}";
         var handle = await StartWorkflowAsync(harness, workflowId);
-        var authentication = A.Fake<AuthenticationStateProvider>();
-        A.CallTo(() => authentication.GetAuthenticationStateAsync())
-            .Returns(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
         var cart = A.Fake<WebCartService>();
         A.CallTo(() => cart.Items).Returns(Array.Empty<CartItem>());
         using var instrumentation = new WebInstrumentation();
-        var chatService = new WebChatService(
-            new WorkflowHandleChatClient(handle),
-            authentication,
-            cart,
-            instrumentation);
+        var chatService = CreateWebChatService(handle, cart, instrumentation);
         await chatService.InitializeAsync();
 
         var result = await chatService.SendMessageAsync("Keep adding the keepsake");
@@ -299,17 +294,10 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             chatClient);
         var workflowId = $"giftshop-chat-incomplete-{Guid.NewGuid():N}";
         var handle = await StartWorkflowAsync(harness, workflowId);
-        var authentication = A.Fake<AuthenticationStateProvider>();
-        A.CallTo(() => authentication.GetAuthenticationStateAsync())
-            .Returns(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
         var cart = A.Fake<WebCartService>();
         A.CallTo(() => cart.Items).Returns(Array.Empty<CartItem>());
         using var instrumentation = new WebInstrumentation();
-        var chatService = new WebChatService(
-            new WorkflowHandleChatClient(handle),
-            authentication,
-            cart,
-            instrumentation);
+        var chatService = CreateWebChatService(handle, cart, instrumentation);
         await chatService.InitializeAsync();
 
         var incomplete = await chatService.SendMessageAsync("Add the keepsake");
@@ -567,12 +555,189 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
         await handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
     }
 
+    /// <summary>
+    /// A hallucinated product or collection ID produces a correctable answer and no navigation.
+    /// </summary>
+    /// <remarks>
+    /// Both assertions matter and neither is sufficient. Returning the "there is no ..." string
+    /// while still recording the navigation is the half-fix: the model reads an error, the customer
+    /// is sent to a dead route anyway, and a test that only inspected the tool result would pass.
+    /// The turn state is therefore asserted empty as well — that is the value Web actually acts on.
+    /// The requested paths are asserted too, because the guard is only a guard if it really asked
+    /// ProductsAPI; a range check that happened to reject 4242 would satisfy everything else here.
+    /// </remarks>
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Integration)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task NavigationTools_WithUnknownIds_AnswerWithoutQueueingNavigation()
+    {
+        var toolResults = new List<string>();
+        var products = CreateNavigationProductsHandler();
+        var chatClient = new ScriptedGiftShopChatClient((call, messages, options) => call switch
+        {
+            1 => ToolCalls(
+                Call("nav-product-missing", "navigate_to_product", ("productId", 4242)),
+                Call("nav-collection-missing", "navigate_to_collection", ("categoryId", 4242))),
+            2 => Final(CaptureToolResults(
+                messages,
+                options,
+                toolResults,
+                "Neither of those exists in the catalogue.")),
+            _ => throw new InvalidOperationException($"Unexpected model call {call}."),
+        });
+        await using var harness = await GiftShopChatWorkerHarness.StartAsync(
+            fixture.Environment,
+            chatClient,
+            productsHandler: products);
+        var workflowId = $"giftshop-chat-nav-unknown-{Guid.NewGuid():N}";
+        var handle = await StartWorkflowAsync(harness, workflowId);
+
+        var result = await handle.ExecuteUpdateAsync(
+            workflow => workflow.SendMessageAsync(CreateRequest(
+                "nav-unknown-turn",
+                "Open product 4242 and collection 4242")),
+            new WorkflowUpdateOptions { Id = "nav-unknown-turn" });
+
+        result.CompletionReason.Should().Be(DurableTurnCompletionReason.FinalResponse);
+        result.FinalTurnState!.NavigationActions.Should().BeEmpty();
+        result.FinalTurnState.CartActions.Should().BeEmpty();
+        toolResults.Should().Contain(toolResult => toolResult.Contains(
+            "There is no product with ID 4242, so nothing was opened."));
+        toolResults.Should().Contain(toolResult => toolResult.Contains(
+            "There is no collection with ID 4242, so nothing was opened."));
+        products.Paths.Should().Contain("/api/products/4242");
+        products.Paths.Should().Contain("/api/categories/4242");
+
+        await handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
+    }
+
+    /// <summary>
+    /// Verifying IDs did not cost the tools their ordinary behaviour, including collection 0.
+    /// </summary>
+    /// <remarks>
+    /// The guard's failure mode in the other direction is a tool that now refuses work it used to
+    /// do. Category 0 is the case to watch: it is the documented "show every collection" value and
+    /// <c>/api/categories/0</c> does not exist, so resolving it like any other ID would turn the
+    /// collections index into a permanent "there is no collection with ID 0". The absent lookup is
+    /// asserted rather than inferred from the queued action, since a lookup that 404s and is then
+    /// ignored would leave the same turn state behind.
+    /// </remarks>
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Integration)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task NavigationTools_WithValidIds_QueueNavigationAndSkipLookupForAllCollections()
+    {
+        var toolResults = new List<string>();
+        var products = CreateNavigationProductsHandler();
+        var chatClient = new ScriptedGiftShopChatClient((call, messages, options) => call switch
+        {
+            1 => ToolCalls(
+                Call("nav-product-ok", "navigate_to_product", ("productId", 7)),
+                Call("nav-collection-ok", "navigate_to_collection", ("categoryId", 3)),
+                Call("nav-collection-all", "navigate_to_collection", ("categoryId", 0))),
+            2 => Final(CaptureToolResults(
+                messages,
+                options,
+                toolResults,
+                "Taking you there.")),
+            _ => throw new InvalidOperationException($"Unexpected model call {call}."),
+        });
+        await using var harness = await GiftShopChatWorkerHarness.StartAsync(
+            fixture.Environment,
+            chatClient,
+            productsHandler: products);
+        var workflowId = $"giftshop-chat-nav-valid-{Guid.NewGuid():N}";
+        var handle = await StartWorkflowAsync(harness, workflowId);
+
+        var result = await handle.ExecuteUpdateAsync(
+            workflow => workflow.SendMessageAsync(CreateRequest(
+                "nav-valid-turn",
+                "Open the keepsake box, then Comfort, then everything")),
+            new WorkflowUpdateOptions { Id = "nav-valid-turn" });
+
+        result.CompletionReason.Should().Be(DurableTurnCompletionReason.FinalResponse);
+        result.FinalTurnState!.NavigationActions.Should().Equal(
+            new NavigationAction(NavigationTarget.Product, "/product/7"),
+            new NavigationAction(NavigationTarget.Collection, "/collections/3"),
+            new NavigationAction(NavigationTarget.Collection, "/collections"));
+        toolResults.Should().Contain(toolResult =>
+            toolResult.Contains("Navigating to the Keepsake Box page."));
+        toolResults.Should().Contain(toolResult =>
+            toolResult.Contains("Navigating to the Comfort collection."));
+        toolResults.Should().Contain(toolResult =>
+            toolResult.Contains("Navigating to all collections."));
+        products.Paths.Should().NotContain("/api/categories/0");
+
+        await handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
+    }
+
+    /// <summary>ProductsAPI stub knowing only product 7 and collection 3.</summary>
+    private static ScriptedProductsHandler CreateNavigationProductsHandler() =>
+        new(request =>
+        {
+            var json = (request.RequestUri?.PathAndQuery ?? string.Empty) switch
+            {
+                "/api/products/7" => """{"id":7,"name":"Keepsake Box","price":25.00}""",
+                "/api/categories/3" => """{"id":3,"name":"Comfort"}""",
+                _ => string.Empty,
+            };
+            return new HttpResponseMessage(
+                json.Length == 0 ? HttpStatusCode.NotFound : HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+        });
+
+    /// <summary>Records the tool results the model can see, then returns the final text.</summary>
+    /// <remarks>
+    /// Recorded rather than asserted in place: an assertion that throws inside the scripted client
+    /// fails the GetChatStep activity, which Temporal retries and eventually surfaces as a workflow
+    /// failure naming the retry, not the expectation. Collecting here and asserting in the test body
+    /// keeps the failure legible. Appends, never replaces — a retried model step would otherwise
+    /// discard what the first attempt observed.
+    /// </remarks>
+    private static string CaptureToolResults(
+        IReadOnlyList<ChatMessage> messages,
+        ChatOptions? options,
+        List<string> toolResults,
+        string text)
+    {
+        options!.Tools.Should().HaveCount(13);
+        lock (toolResults)
+        {
+            toolResults.AddRange(messages
+                .SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Select(functionResult => JsonSerializer.Serialize(functionResult.Result)));
+        }
+
+        return text;
+    }
+
     private async Task<WorkflowHandle<GiftShopChatWorkflow>> StartWorkflowAsync(
         GiftShopChatWorkerHarness harness,
         string workflowId) =>
         await fixture.Environment.Client.StartWorkflowAsync(
             (GiftShopChatWorkflow workflow) => workflow.RunAsync(harness.WorkflowInput),
             new WorkflowOptions(workflowId, harness.TaskQueue));
+
+    private static WebChatService CreateWebChatService(
+        WorkflowHandle<GiftShopChatWorkflow> handle,
+        WebCartService cart,
+        WebInstrumentation instrumentation)
+    {
+        var authentication = A.Fake<AuthenticationStateProvider>();
+        A.CallTo(() => authentication.GetAuthenticationStateAsync())
+            .Returns(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
+
+        return new WebChatService(
+            new WorkflowHandleChatClient(handle),
+            authentication,
+            cart,
+            new WebAnonymousChatSession { ChatId = Guid.NewGuid().ToString("N") },
+            instrumentation,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WebChatService>.Instance);
+    }
 
     private static DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState> CreateRequest(
         string operationId,
@@ -850,8 +1015,13 @@ public class GiftShopChatWorkflowIntegrationTests(GiftShopChatTemporalFixture fi
             GetHistoryAsync(string workflowId) =>
             handle.QueryAsync(workflow => workflow.GetHistory());
 
-        public Task ShutdownAsync(string workflowId) =>
-            handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
+        public async Task ShutdownAsync(
+            string workflowId,
+            CancellationToken cancellationToken = default)
+        {
+            await handle.SignalAsync(workflow => workflow.RequestShutdownAsync());
+            await handle.GetResultAsync();
+        }
     }
 }
 

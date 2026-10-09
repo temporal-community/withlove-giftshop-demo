@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.AI;
 using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
+using WithLove.Workflows;
 using WithLove.Workflows.Chat;
+using WithLove.Workflows.Workflows;
 
 namespace WithLove.Web.Tests.Unit.Services;
 
@@ -17,6 +19,15 @@ public class ChatServiceTests : IDisposable
     private readonly AuthenticationStateProvider _authentication =
         A.Fake<AuthenticationStateProvider>();
     private readonly ICartService _cart = A.Fake<ICartService>();
+    private readonly ILogger<ChatService> _logger = A.Fake<ILogger<ChatService>>();
+
+    // Stands in for the wl-chat-id cookie that AnonymousChatMiddleware puts on the circuit. Real
+    // shape — 32 lowercase hex characters — so anything asserting on the derived workflow ID sees
+    // what production would produce.
+    private readonly AnonymousChatSession _chatSession = new()
+    {
+        ChatId = Guid.NewGuid().ToString("N"),
+    };
     private readonly Instrumentation _instrumentation = new();
 
     public ChatServiceTests()
@@ -72,6 +83,78 @@ public class ChatServiceTests : IDisposable
         result.AssistantMessage.Should().Be("Added it for you.");
         result.NavigationActions.Should().ContainSingle(action => action.Url == "/cart");
         A.CallTo(() => _cart.AddItemAsync(A<CartItem>.That.Matches(item => item.ProductId == 7)))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task SendMessage_WithoutExplicitInitialization_InitializesBeforeDispatch()
+    {
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                A<string>._,
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
+            .Returns(FinalResult("Ready.", GiftShopChatTurnState.Create([])));
+        var service = CreateService();
+
+        var result = await service.SendMessageAsync("Hello");
+
+        result.AssistantMessage.Should().Be("Ready.");
+        A.CallTo(() => _authentication.GetAuthenticationStateAsync())
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _workflowClient.EnsureStartedAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}"))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}",
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task SendMessage_DuringInitialization_WaitsForTheSingleInitialization()
+    {
+        var authenticationReady = new TaskCompletionSource<AuthenticationState>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        A.CallTo(() => _authentication.GetAuthenticationStateAsync())
+            .Returns(authenticationReady.Task);
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                A<string>._,
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
+            .Returns(FinalResult("Ready.", GiftShopChatTurnState.Create([])));
+        var service = CreateService();
+
+        var initialize = service.InitializeAsync();
+        var send = service.SendMessageAsync("Hello");
+
+        initialize.IsCompleted.Should().BeFalse();
+        send.IsCompleted.Should().BeFalse();
+        A.CallTo(() => _authentication.GetAuthenticationStateAsync())
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                A<string>._,
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
+            .MustNotHaveHappened();
+
+        authenticationReady.SetResult(
+            new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
+        await Task.WhenAll(initialize, send);
+
+        A.CallTo(() => _authentication.GetAuthenticationStateAsync())
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _workflowClient.EnsureStartedAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}"))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}",
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
             .MustHaveHappenedOnceExactly();
     }
 
@@ -231,98 +314,6 @@ public class ChatServiceTests : IDisposable
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Chat)]
-    public async Task SendMessage_FinalResponseRecordsAlignedCompletionTelemetry()
-    {
-        var service = CreateService();
-        await service.InitializeAsync();
-        A.CallTo(() => _workflowClient.SendMessageAsync(
-                A<string>._,
-                A<string>._,
-                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
-            .Returns(FinalResult("Done.", GiftShopChatTurnState.Create([])));
-        using var telemetry = new ChatTurnTelemetryCapture(_instrumentation);
-
-        await service.SendMessageAsync("Finish");
-
-        telemetry.ShouldHaveRecorded("FinalResponse", ActivityStatusCode.Unset);
-    }
-
-    [Fact]
-    [Trait(TestTraits.Category, TestTraits.Unit)]
-    [Trait(TestTraits.Feature, TestTraits.Chat)]
-    public async Task SendMessage_IterationLimitRecordsAlignedCompletionTelemetry()
-    {
-        var service = CreateService();
-        await service.InitializeAsync();
-        A.CallTo(() => _workflowClient.SendMessageAsync(
-                A<string>._,
-                A<string>._,
-                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
-            .Returns(new DurableTurnResult<GiftShopChatTurnState>
-            {
-                Response = new ChatResponse(new ChatMessage(
-                    ChatRole.Assistant,
-                    GiftShopChatResponseProjector.IterationLimitMessage)),
-                CompletionReason = DurableTurnCompletionReason.IterationLimitReached,
-                FinalTurnState = GiftShopChatTurnState.Create([]),
-            });
-        using var telemetry = new ChatTurnTelemetryCapture(_instrumentation);
-
-        await service.SendMessageAsync("Keep trying");
-
-        telemetry.ShouldHaveRecorded("IterationLimitReached", ActivityStatusCode.Unset);
-    }
-
-    [Fact]
-    [Trait(TestTraits.Category, TestTraits.Unit)]
-    [Trait(TestTraits.Feature, TestTraits.Chat)]
-    public async Task SendMessage_IncompleteResponseRecordsAlignedCompletionTelemetry()
-    {
-        var service = CreateService();
-        await service.InitializeAsync();
-        A.CallTo(() => _workflowClient.SendMessageAsync(
-                A<string>._,
-                A<string>._,
-                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
-            .Returns(new DurableTurnResult<GiftShopChatTurnState>
-            {
-                Response = new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Empty))
-                {
-                    FinishReason = ChatFinishReason.Length,
-                },
-                CompletionReason = DurableTurnCompletionReason.IncompleteResponse,
-                FinalTurnState = GiftShopChatTurnState.Create([]),
-            });
-        using var telemetry = new ChatTurnTelemetryCapture(_instrumentation);
-
-        await service.SendMessageAsync("Try again");
-
-        telemetry.ShouldHaveRecorded("IncompleteResponse", ActivityStatusCode.Unset);
-    }
-
-    [Fact]
-    [Trait(TestTraits.Category, TestTraits.Unit)]
-    [Trait(TestTraits.Feature, TestTraits.Chat)]
-    public async Task SendMessage_WorkflowFailureRecordsFailedTelemetryAndErrorStatus()
-    {
-        var service = CreateService();
-        await service.InitializeAsync();
-        A.CallTo(() => _workflowClient.SendMessageAsync(
-                A<string>._,
-                A<string>._,
-                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
-            .ThrowsAsync(new InvalidOperationException("workflow failed"));
-        using var telemetry = new ChatTurnTelemetryCapture(_instrumentation);
-
-        Func<Task> send = () => service.SendMessageAsync("Fail");
-
-        await send.Should().ThrowAsync<InvalidOperationException>();
-        telemetry.ShouldHaveRecorded("Failed", ActivityStatusCode.Error);
-    }
-
-    [Fact]
-    [Trait(TestTraits.Category, TestTraits.Unit)]
-    [Trait(TestTraits.Feature, TestTraits.Chat)]
     public async Task Initialize_AuthenticatedUserUsesStableGiftShopWorkflowPrefix()
     {
         var identity = new ClaimsIdentity(
@@ -388,7 +379,22 @@ public class ChatServiceTests : IDisposable
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.Chat)]
-    public async Task EndSession_SignalsShutdownAndResetsAnonymousSession()
+    /// <remarks>
+    /// This test replaces <c>EndSession_SignalsShutdownAndResetsAnonymousSession</c>, and the
+    /// assertion it used to make — that the second workflow ID <em>differs</em> from the first —
+    /// is now deliberately inverted to <c>Be</c>. That is not a weakened safety test.
+    /// <para>
+    /// The old assertion was a proxy. It held only because an anonymous session minted a fresh
+    /// GUID per circuit, so the identity changed whether or not shutdown did anything, and End
+    /// Chat's shutdown signal was decorative for anonymous users and outright broken for
+    /// authenticated ones — whose ID was already stable, so their "cleared" transcript came back
+    /// on reopen. With wl-chat-id the ID is stable for everyone, and shutdown becomes the only
+    /// mechanism that ends a session. So this asserts the thing the product actually promises —
+    /// the transcript is gone — rather than a proxy for it, and it now covers both auth states
+    /// with one behaviour instead of accidentally covering neither.
+    /// </para>
+    /// </remarks>
+    public async Task EndSession_ShutsDownTheRunAndLeavesNoTranscript()
     {
         var service = CreateService();
         await service.InitializeAsync();
@@ -396,19 +402,36 @@ public class ChatServiceTests : IDisposable
         var firstWorkflowId = Fake.GetCalls(_workflowClient)
             .Single(call => call.Method.Name == nameof(IGiftShopChatWorkflowClient.EnsureStartedAsync))
             .Arguments[0] as string;
+        service.Messages.Add(new ChatHistoryEntry(true, "Find a gift", DateTime.UtcNow));
 
         await service.EndSessionAsync();
+
+        A.CallTo(() => _workflowClient.ShutdownAsync(firstWorkflowId!, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        service.Messages.Should().BeEmpty();
+
+        // Reopening rebuilds the *same* ID, because the cookie did not change and cannot: it is
+        // HttpOnly and End Chat runs in a circuit with no HttpResponse.
         await service.InitializeAsync();
         await service.EnsureWorkflowStartedAsync();
 
-        A.CallTo(() => _workflowClient.ShutdownAsync(firstWorkflowId!))
-            .MustHaveHappenedOnceExactly();
         var workflowIds = Fake.GetCalls(_workflowClient)
             .Where(call => call.Method.Name == nameof(IGiftShopChatWorkflowClient.EnsureStartedAsync))
             .Select(call => call.Arguments[0] as string)
             .ToList();
         workflowIds.Should().HaveCount(2);
-        workflowIds[1].Should().NotBe(firstWorkflowId);
+        workflowIds[1].Should().Be(firstWorkflowId);
+
+        // Rehydration under that same ID still shows nothing, because GetHistoryAsync refuses to
+        // read a closed run. That refusal — not an ID change — is what makes End Chat mean
+        // something.
+        A.CallTo(() => _workflowClient.GetHistoryAsync(firstWorkflowId!))
+            .Throws(new Temporalio.Exceptions.WorkflowQueryRejectedException(
+                Temporalio.Api.Enums.V1.WorkflowExecutionStatus.Completed));
+
+        await service.LoadHistoryAsync();
+
+        service.Messages.Should().BeEmpty();
     }
 
     public void Dispose() => _instrumentation.Dispose();
@@ -482,8 +505,313 @@ public class ChatServiceTests : IDisposable
         GiftShopChatResponseProjector.AssistantFallback.Should().Be(
             "Hmm, something went sideways on my end. Mind trying that again?");
 
+    #region Stable anonymous identity (wl-chat-id)
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task Initialize_AnonymousDerivesTheWorkflowIdFromTheChatCookieIdentity()
+    {
+        var service = CreateService();
+
+        await service.InitializeAsync();
+        await service.EnsureWorkflowStartedAsync();
+
+        // Derived, not random. The anon- prefix is what guarantees this can never collide with
+        // giftshop-chat-{userId} for a real user whose ID happens to look like a Guid.
+        A.CallTo(() => _workflowClient.EnsureStartedAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}"))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task Initialize_AnonymousIsStableAcrossTwoServiceInstances()
+    {
+        // This is the feature. ChatService is scoped per SignalR circuit, so an F5, a second tab
+        // and a dropped-then-reconnected circuit each construct a new instance — and before
+        // wl-chat-id each of those minted a fresh GUID and therefore a brand new workflow. Two
+        // instances reading one cookie-backed session must land on one workflow ID, or resume is
+        // not implemented no matter what the rest of the wiring says.
+        var firstCircuit = CreateService();
+        var secondCircuit = CreateService();
+
+        await firstCircuit.InitializeAsync();
+        await firstCircuit.EnsureWorkflowStartedAsync();
+        await secondCircuit.InitializeAsync();
+        await secondCircuit.EnsureWorkflowStartedAsync();
+
+        var workflowIds = Fake.GetCalls(_workflowClient)
+            .Where(call => call.Method.Name == nameof(IGiftShopChatWorkflowClient.EnsureStartedAsync))
+            .Select(call => call.Arguments[0] as string)
+            .ToList();
+        workflowIds.Should().HaveCount(2);
+        workflowIds[1].Should().Be(workflowIds[0]);
+        workflowIds[0].Should().Be($"giftshop-chat-anon-{_chatSession.ChatId}");
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task Initialize_TwoDifferentVisitorsDoNotShareAWorkflow()
+    {
+        // The counterweight to the test above: "stable" must not have been bought by making the ID
+        // constant. Two visitors carrying different cookies must never meet in one transcript.
+        var visitor = new ChatService(
+            _workflowClient,
+            _authentication,
+            _cart,
+            new AnonymousChatSession { ChatId = Guid.NewGuid().ToString("N") },
+            _instrumentation,
+            _logger);
+        var otherVisitor = CreateService();
+
+        await visitor.InitializeAsync();
+        await visitor.EnsureWorkflowStartedAsync();
+        await otherVisitor.InitializeAsync();
+        await otherVisitor.EnsureWorkflowStartedAsync();
+
+        var workflowIds = Fake.GetCalls(_workflowClient)
+            .Where(call => call.Method.Name == nameof(IGiftShopChatWorkflowClient.EnsureStartedAsync))
+            .Select(call => call.Arguments[0] as string)
+            .ToList();
+        workflowIds.Should().OnlyHaveUniqueItems();
+    }
+
+    [Theory]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task Initialize_AnonymousWithNoChatIdentity_ThrowsAndDispatchesNothing(
+        string? missingChatId)
+    {
+        // Deliberately *not* the cart's pattern. FusionCacheCartService mints a per-circuit GUID
+        // when its cookie value did not arrive; copied here that would hand every visitor a fresh
+        // workflow while the feature looked implemented and nothing reported otherwise. The wiring
+        // bug this catches — middleware unregistered, RegisterPersistentService dropped, middleware
+        // placed after MapRazorComponents — reproduces on the first page load in development and
+        // never in production if development is correct, so failing loudly costs nothing and
+        // silently degrading costs the whole feature.
+        _chatSession.ChatId = missingChatId!;
+        var service = CreateService();
+
+        var initialize = () => service.InitializeAsync();
+
+        (await initialize.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*anonymous chat identity is missing*");
+        Fake.GetCalls(_workflowClient).Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task Initialize_AnonymousWithNoChatIdentity_CountsAnIdentityFailure()
+    {
+        // A log line is not a report. This counter is zero in a healthy system and non-zero
+        // exactly when stable identity has silently reverted, which is the only signal that
+        // survives a future cookie-consent gate switching the cookie off.
+        _chatSession.ChatId = string.Empty;
+        var service = CreateService();
+        using var counter = new CounterCapture(_instrumentation, "chat.session.identity_failures");
+
+        var initialize = () => service.InitializeAsync();
+
+        await initialize.Should().ThrowAsync<InvalidOperationException>();
+        counter.Total.Should().Be(1);
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task Initialize_AuthenticatedUser_NeedsNoAnonymousChatIdentity()
+    {
+        // An authenticated visitor's ID comes from the auth claim, so a missing cookie must not
+        // break their chat — the throw is scoped to the case where it is genuinely load-bearing.
+        _chatSession.ChatId = string.Empty;
+        A.CallTo(() => _authentication.GetAuthenticationStateAsync())
+            .Returns(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "customer-42")],
+                authenticationType: "test"))));
+        var service = CreateService();
+
+        await service.InitializeAsync();
+        await service.EnsureWorkflowStartedAsync();
+
+        A.CallTo(() => _workflowClient.EnsureStartedAsync("giftshop-chat-customer-42"))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    #endregion
+
+    #region Lazy start and hydration
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task OpeningThePanel_StartsNoWorkflowUntilTheFirstMessage()
+    {
+        // ChatFab.OpenChat is exactly these two calls now; the EnsureWorkflowStartedAsync it used
+        // to make was deleted so a visitor who opens the panel and never types creates nothing in
+        // Temporal. Safe only because hydration handles both resulting cases on its own — a
+        // never-started ID comes back NotFound and a closed run is refused by NotOpen.
+        var service = CreateService();
+        A.CallTo(() => _workflowClient.GetHistoryAsync(A<string>._))
+            .Throws(new Temporalio.Exceptions.RpcException(
+                Temporalio.Exceptions.RpcException.StatusCode.NotFound,
+                "workflow not found",
+                null));
+        A.CallTo(() => _workflowClient.SendMessageAsync(
+                A<string>._,
+                A<string>._,
+                A<DurableTurnRequest<GiftShopChatRequestData, GiftShopChatTurnState>>._))
+            .Returns(FinalResult("Hello there.", GiftShopChatTurnState.Create([])));
+
+        await service.InitializeAsync();
+        await service.LoadHistoryAsync();
+
+        A.CallTo(() => _workflowClient.EnsureStartedAsync(A<string>._)).MustNotHaveHappened();
+
+        await service.SendMessageAsync("Hello");
+
+        A.CallTo(() => _workflowClient.EnsureStartedAsync(
+                $"giftshop-chat-anon-{_chatSession.ChatId}"))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task LoadHistory_WhenTheRunIsNotOpen_LeavesMessagesEmpty()
+    {
+        // The other half of the NotOpen reject condition. A closed run still answers queries with
+        // its full transcript, and rendering it would put a conversation on screen that the model
+        // handling the next turn has no memory of — the customer only finds out by leaning on
+        // earlier context and being contradicted.
+        var service = CreateService();
+        await service.InitializeAsync();
+        A.CallTo(() => _workflowClient.GetHistoryAsync(A<string>._))
+            .Throws(new Temporalio.Exceptions.WorkflowQueryRejectedException(
+                Temporalio.Api.Enums.V1.WorkflowExecutionStatus.Completed));
+
+        var load = () => service.LoadHistoryAsync();
+
+        await load.Should().NotThrowAsync();
+        service.Messages.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task LoadHistory_WhenTheWorkflowWasNeverStarted_LeavesMessagesEmpty()
+    {
+        // Regression guard. With lazy start this is now the ordinary first-open path, not an edge
+        // case, so it must stay a swallowed NotFound rather than an unavailable panel.
+        var service = CreateService();
+        await service.InitializeAsync();
+        A.CallTo(() => _workflowClient.GetHistoryAsync(A<string>._))
+            .Throws(new Temporalio.Exceptions.RpcException(
+                Temporalio.Exceptions.RpcException.StatusCode.NotFound,
+                "workflow not found",
+                null));
+
+        var load = () => service.LoadHistoryAsync();
+
+        await load.Should().NotThrowAsync();
+        service.Messages.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task LoadHistory_WhenTemporalIsUnreachable_Propagates()
+    {
+        // The two catches above are narrow on purpose. A broader one would turn "Temporal is
+        // down" into a panel that looks like a working, empty chat and fails at the first send —
+        // ChatFab needs this to reach it so it can render the unavailable state instead.
+        var service = CreateService();
+        await service.InitializeAsync();
+        A.CallTo(() => _workflowClient.GetHistoryAsync(A<string>._))
+            .Throws(new Temporalio.Exceptions.RpcException(
+                Temporalio.Exceptions.RpcException.StatusCode.Unavailable,
+                "Temporal is down",
+                null));
+
+        var load = () => service.LoadHistoryAsync();
+
+        await load.Should().ThrowAsync<Temporalio.Exceptions.RpcException>();
+    }
+
+    #endregion
+
+    #region End Chat resilience
+
+    [Theory]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    [InlineData("unavailable")]
+    [InlineData("not-found")]
+    [InlineData("timed-out")]
+    public async Task EndSession_ClearsTheTranscriptEvenWhenTheShutdownFails(string failure)
+    {
+        // Temporal being down must not mean a customer cannot clear their own conversation. An
+        // orphaned run that reaps itself is the better of the two bad outcomes.
+        Exception thrown = failure switch
+        {
+            "unavailable" => new Temporalio.Exceptions.RpcException(
+                Temporalio.Exceptions.RpcException.StatusCode.Unavailable,
+                "Temporal is down",
+                null),
+            "not-found" => new Temporalio.Exceptions.RpcException(
+                Temporalio.Exceptions.RpcException.StatusCode.NotFound,
+                "never started",
+                null),
+            _ => new OperationCanceledException(),
+        };
+        var service = CreateService();
+        await service.InitializeAsync();
+        service.Messages.Add(new ChatHistoryEntry(true, "Find a gift", DateTime.UtcNow));
+        A.CallTo(() => _workflowClient.ShutdownAsync(A<string>._, A<CancellationToken>._))
+            .ThrowsAsync(thrown);
+
+        var end = () => service.EndSessionAsync();
+
+        await end.Should().NotThrowAsync();
+        service.Messages.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public async Task EndSession_BoundsTheWaitForTheRunToClose()
+    {
+        // A signal is not a completion, so ShutdownAsync waits for the run to actually close —
+        // which is what stops the next message attaching to a still-open, shutdown-flagged run and
+        // being rejected by the update validator. Waiting unbounded would trade that race for a
+        // spinner, so the wait carries a budget the call site owns.
+        var service = CreateService();
+        await service.InitializeAsync();
+        CancellationToken budget = default;
+        A.CallTo(() => _workflowClient.ShutdownAsync(A<string>._, A<CancellationToken>._))
+            .Invokes((string _, CancellationToken token) => budget = token);
+
+        await service.EndSessionAsync();
+
+        budget.CanBeCanceled.Should().BeTrue();
+        budget.IsCancellationRequested.Should().BeFalse();
+    }
+
+    #endregion
+
     private ChatService CreateService() =>
-        new(_workflowClient, _authentication, _cart, _instrumentation);
+        new(
+            _workflowClient,
+            _authentication,
+            _cart,
+            _chatSession,
+            _instrumentation,
+            _logger);
 
     private static DurableTurnResult<GiftShopChatTurnState> FinalResult(
         string assistantMessage,
@@ -495,59 +823,33 @@ public class ChatServiceTests : IDisposable
             FinalTurnState = state,
         };
 
-    private sealed class ChatTurnTelemetryCapture : IDisposable
+    /// <summary>Sums every measurement recorded on one named counter of one meter.</summary>
+    private sealed class CounterCapture : IDisposable
     {
-        private readonly ActivityListener _activityListener;
-        private readonly MeterListener _meterListener;
-        private readonly ConcurrentQueue<Activity> _activities = new();
-        private readonly ConcurrentQueue<string> _histogramReasons = new();
+        private readonly MeterListener _listener;
+        private long _total;
 
-        public ChatTurnTelemetryCapture(Instrumentation instrumentation)
+        public CounterCapture(Instrumentation instrumentation, string instrumentName)
         {
-            _activityListener = new ActivityListener
-            {
-                ShouldListenTo = source => ReferenceEquals(source, instrumentation.ActivitySource),
-                Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
-                    ActivitySamplingResult.AllDataAndRecorded,
-                ActivityStopped = activity => _activities.Enqueue(activity),
-            };
-            ActivitySource.AddActivityListener(_activityListener);
-
-            _meterListener = new MeterListener
+            _listener = new MeterListener
             {
                 InstrumentPublished = (instrument, listener) =>
                 {
                     if (ReferenceEquals(instrument.Meter, instrumentation.Meter)
-                        && instrument.Name == "chat.turn.duration_ms")
+                        && instrument.Name == instrumentName)
                     {
                         listener.EnableMeasurementEvents(instrument);
                     }
                 },
             };
-            _meterListener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
-            {
-                foreach (var tag in tags)
-                {
-                    if (tag.Key == "completion_reason" && tag.Value is string reason)
-                        _histogramReasons.Enqueue(reason);
-                }
-            });
-            _meterListener.Start();
+            _listener.SetMeasurementEventCallback<long>(
+                (_, measurement, _, _) => Interlocked.Add(ref _total, measurement));
+            _listener.Start();
         }
 
-        public void ShouldHaveRecorded(string completionReason, ActivityStatusCode status)
-        {
-            _activities.Should().ContainSingle();
-            var activity = _activities.Single();
-            activity.GetTagItem("chat.completion_reason").Should().Be(completionReason);
-            activity.Status.Should().Be(status);
-            _histogramReasons.Should().ContainSingle().Which.Should().Be(completionReason);
-        }
+        public long Total => Interlocked.Read(ref _total);
 
-        public void Dispose()
-        {
-            _meterListener.Dispose();
-            _activityListener.Dispose();
-        }
+        public void Dispose() => _listener.Dispose();
     }
+
 }

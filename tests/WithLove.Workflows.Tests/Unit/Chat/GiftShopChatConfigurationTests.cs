@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.AI;
 using TemporalCommunity.Extensions.AI;
 using TemporalCommunity.Extensions.AI.Session;
@@ -72,6 +73,79 @@ public class GiftShopChatConfigurationTests
         instructions.Should().Contain("You are LA");
         instructions.Should().Contain("<customer_name>Avery</customer_name>");
         instructions.Should().NotContain("user-7");
+    }
+
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    /// <summary>
+    /// The prompt pins catalogue fidelity and says nothing whatever about images.
+    /// </summary>
+    /// <remarks>
+    /// This test previously asserted the presence of an explicit "Do not include image URLs"
+    /// instruction, which existed only because <c>FormatProductSummary</c> emitted an
+    /// <c>"| Image: {url}"</c> field into tool results that the model then had to be told to
+    /// discard. Now that the catalogue no longer emits the URL, the instruction has no referent —
+    /// and a rule describing a field the model never sees is a standing invitation to mention one.
+    /// The assertion is therefore inverted: presentation is the catalogue's job, so the prompt is
+    /// expected to be silent on it. What the prompt must still carry is name fidelity, because a
+    /// paraphrased product name is unrecoverable once the customer acts on it.
+    /// </remarks>
+    public void BuildInstructions_LeavesProductPresentationToTheCatalog()
+    {
+        var instructions = GiftShopChatPrompt.BuildInstructions(null);
+
+        instructions.Should().Contain("copy each product name exactly from the tool result");
+        instructions.Should().NotContain("image URL");
+        instructions.Should().NotContain("Image:");
+        instructions.Should().NotContain("markdown image");
+        instructions.Should().NotContain("![Product Name]");
+    }
+
+    /// <summary>
+    /// The tier table and redemption rate the prompt quotes are projections of
+    /// <see cref="LoyaltyContracts"/>, not a second copy of the numbers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The prompt states the tiers so LA can answer "what is the next tier" without a tool call,
+    /// which means the same three numbers are quoted here and enforced in
+    /// <c>LoyaltyState.Tier</c> and <c>LoyaltyAccountWorkflow</c>. Prose does not fail a build: if
+    /// the thresholds move and the prompt holds literals, LA keeps confidently quoting the old
+    /// table to customers and nothing anywhere goes red.
+    /// </para>
+    /// <para>
+    /// This test is the thing that goes red. Because the expectations are built from the constants,
+    /// it stays green when a threshold legitimately changes <i>and the prompt is a projection</i>,
+    /// and fails the moment the prompt stops deriving from them — which is the only point at which
+    /// the drift is still cheap to fix.
+    /// </para>
+    /// <para>
+    /// Expectations are formatted with <see cref="CultureInfo.InvariantCulture"/> to match how the
+    /// prompt builds them. That is not merely cosmetic: on a machine whose culture uses a different
+    /// group separator, a prompt that stopped pinning the culture would render "1.999" and fail
+    /// here — the prompt is a shared cache prefix, so it must be byte-identical across workers.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait(TestTraits.Category, TestTraits.Unit)]
+    [Trait(TestTraits.Feature, TestTraits.Chat)]
+    public void BuildInstructions_ProjectsLoyaltyThresholdsFromLoyaltyContracts()
+    {
+        var instructions = GiftShopChatPrompt.BuildInstructions(null);
+
+        instructions.Should().Contain(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Bronze (0–{LoyaltyContracts.SilverThreshold - 1:N0} lifetime pts)"));
+        instructions.Should().Contain(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Silver ({LoyaltyContracts.SilverThreshold:N0}–{LoyaltyContracts.GoldThreshold - 1:N0})"));
+        instructions.Should().Contain(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Gold ({LoyaltyContracts.GoldThreshold:N0}+)"));
+        instructions.Should().Contain(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{LoyaltyContracts.PointsPerDiscountDollar:N0} tokens = $1 off"));
     }
 
     [Fact]

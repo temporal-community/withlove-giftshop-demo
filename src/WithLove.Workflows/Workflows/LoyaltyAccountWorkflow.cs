@@ -189,7 +189,7 @@ public partial class LoyaltyAccountWorkflow
     {
         // Workflow.NewGuid() is deterministic and replay-safe; never use Guid.NewGuid() in workflow code.
         var redemptionId = Workflow.NewGuid().ToString();
-        var discountAmount = input.PointsRequested / 100m; // 100 pts = $1
+        var discountAmount = input.PointsRequested / (decimal)LoyaltyContracts.PointsPerDiscountDollar;
 
         _state = _state with { Balance = _state.Balance - input.PointsRequested };
         _state.PendingRedemptions[redemptionId] = new PendingRedemption(
@@ -211,8 +211,8 @@ public partial class LoyaltyAccountWorkflow
     {
         var pointsToNextTier = _state.Tier switch
         {
-            LoyaltyTier.Bronze => 500 - _state.LifetimeEarned,
-            LoyaltyTier.Silver => 2000 - _state.LifetimeEarned,
+            LoyaltyTier.Bronze => LoyaltyContracts.SilverThreshold - _state.LifetimeEarned,
+            LoyaltyTier.Silver => LoyaltyContracts.GoldThreshold - _state.LifetimeEarned,
             LoyaltyTier.Gold   => 0,
             _                  => 0
         };

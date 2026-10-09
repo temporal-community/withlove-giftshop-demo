@@ -70,11 +70,12 @@ internal sealed class GiftShopChatWorkerHarness : IAsyncDisposable
         WorkflowEnvironment environment,
         ScriptedGiftShopChatClient chatClient,
         Func<DurableChatWorkflowInput, DurableChatWorkflowInput>? transformInput = null,
-        HttpMessageHandler? productsHandler = null)
+        HttpMessageHandler? productsHandler = null,
+        string? taskQueue = null)
     {
         var targetHost = environment.Client.Connection.Options.TargetHost
             ?? throw new InvalidOperationException("Temporal target host is unavailable.");
-        var taskQueue = $"giftshop-chat-test-{Guid.NewGuid():N}";
+        taskQueue ??= $"giftshop-chat-test-{Guid.NewGuid():N}";
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddLogging();
         builder.Services.AddChatClient(chatClient).Build();
@@ -90,7 +91,7 @@ internal sealed class GiftShopChatWorkerHarness : IAsyncDisposable
                 targetHost,
                 environment.Client.Options.Namespace,
                 taskQueue)
-            .AddGiftShopChatWorker()
+            .ConfigureGiftShopChatWorker()
             .AddWorkflow<GiftShopSharedWorkerStatusWorkflow>()
             .AddWorkflow<LoyaltyAccountWorkflow>();
 
@@ -242,6 +243,7 @@ internal sealed class GiftShopProductsHandler : HttpMessageHandler
             "/api/products/7" => ProductJson,
             var value when value.StartsWith("/api/products/search", StringComparison.Ordinal) =>
                 $$"""{"value":[{{ProductJson}}]}""",
+            "/api/categories/3" => """{"id":3,"name":"Comfort","description":"Warm gifts"}""",
             "/api/categories" => """{"value":[{"id":3,"name":"Comfort","description":"Warm gifts"}]}""",
             "/api/products/category/3" => $$"""{"value":[{{ProductJson}}]}""",
             _ => string.Empty,

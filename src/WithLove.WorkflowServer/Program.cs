@@ -127,7 +127,7 @@ var temporalWorker = builder.Services.AddHostedTemporalWorker(
     .AddWorkflow<StripeCheckoutOrderWorkflow>()
     .AddWorkflow<LoyaltyAccountWorkflow>();
 
-temporalWorker.AddGiftShopChatWorker();
+temporalWorker.ConfigureGiftShopChatWorker();
 
 builder.Services.AddHostedService<DatabaseSetupHostedService>();
 

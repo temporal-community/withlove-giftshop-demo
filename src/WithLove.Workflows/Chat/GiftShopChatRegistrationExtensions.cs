@@ -23,7 +23,7 @@ public static class GiftShopChatRegistrationExtensions
         return services;
     }
 
-    public static ITemporalWorkerServiceOptionsBuilder AddGiftShopChatWorker(
+    public static ITemporalWorkerServiceOptionsBuilder ConfigureGiftShopChatWorker(
         this ITemporalWorkerServiceOptionsBuilder worker)
     {
         worker.Services.AddScoped<GiftShopChatToolService>();

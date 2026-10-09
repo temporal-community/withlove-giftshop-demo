@@ -3,6 +3,30 @@ namespace WithLove.Workflows.Loyalty;
 public enum LoyaltyTier { Bronze, Silver, Gold }
 
 /// <summary>
+/// The Love Tokens scheme's numeric rules, in one place.
+/// </summary>
+/// <remarks>
+/// These values are quoted to the customer in three unrelated places — tier derivation
+/// (<see cref="LoyaltyState.Tier"/>), the redemption maths in <c>LoyaltyAccountWorkflow</c>, and the
+/// LA system prompt, which states the tier table so the assistant can answer "what's the next tier"
+/// without a tool call. Duplicated literals across those sites drift silently: the prompt is prose,
+/// so a threshold change in the workflow would leave the assistant confidently quoting the old
+/// numbers with nothing to fail. Constants make the prompt a projection of the rules rather than a
+/// second copy of them.
+/// </remarks>
+public static class LoyaltyContracts
+{
+    /// <summary>Lifetime points at which a customer reaches Silver.</summary>
+    public const int SilverThreshold = 500;
+
+    /// <summary>Lifetime points at which a customer reaches Gold, the highest tier.</summary>
+    public const int GoldThreshold = 2000;
+
+    /// <summary>Points that redeem for one US dollar off at checkout.</summary>
+    public const int PointsPerDiscountDollar = 100;
+}
+
+/// <summary>
 /// Committed transaction — written only when CommitRedemptionAsync runs, never on reserve.
 /// </summary>
 public record PointTransaction(
@@ -34,12 +58,12 @@ public record LoyaltyState(
 {
     // Tier is always derived — never stored — eliminates drift risk
     // Tier computed from LifetimeEarned — redemptions never demote tier
-    // Thresholds: Bronze 0–499 | Silver 500–1,999 | Gold 2,000+
+    // Thresholds live in LoyaltyContracts; the LA system prompt quotes the same constants.
     public LoyaltyTier Tier => LifetimeEarned switch
     {
-        >= 2000 => LoyaltyTier.Gold,
-        >= 500  => LoyaltyTier.Silver,
-        _       => LoyaltyTier.Bronze
+        >= LoyaltyContracts.GoldThreshold   => LoyaltyTier.Gold,
+        >= LoyaltyContracts.SilverThreshold => LoyaltyTier.Silver,
+        _                                   => LoyaltyTier.Bronze
     };
 
     // Each call returns a fresh instance to avoid shared mutable state

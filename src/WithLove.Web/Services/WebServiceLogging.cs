@@ -4,6 +4,23 @@ namespace WithLove.Web.Services;
 
 internal static partial class WebServiceLogging
 {
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session initialization started")]
+    internal static partial void ChatSessionInitializationStarted(this ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat session initialization completed")]
+    internal static partial void ChatSessionInitializationCompleted(this ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Chat session initialization failed")]
+    internal static partial void ChatSessionInitializationFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Chat turn {OperationId} requested; initialization required: {InitializationRequired}")]
+    internal static partial void ChatTurnRequested(
+        this ILogger logger,
+        string operationId,
+        bool initializationRequired);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Merged anonymous cart {AnonKey} into {UserKey}")]
     internal static partial void MergedAnonymousCart(this ILogger logger, string anonKey, string userKey);
 

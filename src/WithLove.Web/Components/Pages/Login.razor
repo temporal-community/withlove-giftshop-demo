@@ -7,6 +7,7 @@
 @inject SignInManager<ShopUser> SignInManager
 @inject NavigationManager Navigation
 @inject ILogger<Login> Logger
+@inject ChatIdentityRotator ChatIdentity
 
 <PageTitle>Login | With Love</PageTitle>
 
@@ -94,11 +95,9 @@
                         <ValidationMessage For="() => Input.Email" class="text-xs text-red-400 ml-4 mt-1" />
                     </div>
                     <div class="relative group">
-                        <div class="flex justify-between items-center ml-4 mb-1">
+                        <div class="ml-4 mb-1">
                             <label class="text-[10px] uppercase tracking-widest text-stone-400 font-bold block"
                                    for="password">Password</label>
-                            <a class="text-[10px] uppercase tracking-widest text-primary hover:text-primary-dark transition-colors font-bold"
-                               href="#">Forgot?</a>
                         </div>
                         <InputText @bind-Value="Input.Password" id="password" placeholder="••••••••" type="password"
                                    class="w-full bg-white border-stone-200 rounded-full px-6 py-4 text-sm text-stone-700 placeholder-stone-300 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" />
@@ -139,6 +138,12 @@
 @code {
     private string? _errorMessage;
 
+    // This page is static SSR ([ExcludeFromInteractiveRouting] + a form post), so there is a real
+    // HttpResponse here and the HttpOnly wl-chat-id cookie can be rotated. That is the entire
+    // reason rotation lives at the auth transitions rather than at End Chat.
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
     [SupplyParameterFromForm]
     private LoginInput Input { get; set; } = default!;
 
@@ -158,6 +163,19 @@
         if (result.Succeeded)
         {
             Logger.UserLoggedIn(Input.Email);
+
+            // Rotate before navigating away. Past this point the chat session ID becomes
+            // giftshop-chat-{userId} and the anonymous run is orphaned, so the invariant holds in
+            // one sentence: an anonymous chat identity never spans an authentication boundary.
+            // RotateAsync reads the inbound cookie, mints a replacement, then shuts the old run
+            // down on a short budget. It does not overwrite: Mint appends a Set-Cookie header and
+            // is idempotent per request, so exactly one is written even when the middleware
+            // already minted earlier in this same request. If the inbound cookie was absent or
+            // expired there is no previous run to shut down, and rotation still happens — see R5
+            // in the anonymous-chat-identity design. It never throws, so a failed chat shutdown
+            // cannot cost the customer their sign-in.
+            await ChatIdentity.RotateAsync(HttpContext);
+
             Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
         }
         else

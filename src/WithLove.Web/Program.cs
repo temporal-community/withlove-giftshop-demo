@@ -131,7 +131,8 @@ builder.Services.AddSingleton<Instrumentation>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
-    .RegisterPersistentService<AnonymousCartSession>(RenderMode.InteractiveServer);
+    .RegisterPersistentService<AnonymousCartSession>(RenderMode.InteractiveServer)
+    .RegisterPersistentService<AnonymousChatSession>(RenderMode.InteractiveServer);
 
 builder.Services.AddMemoryCache();
 var redisConnectionString = builder.Configuration.GetConnectionString("redisCache")
@@ -165,6 +166,8 @@ builder.Services.AddHttpClient<IProductService, ProductApiService>(client =>
 builder.Services.AddStripe();
 
 builder.Services.AddScoped<AnonymousCartSession>();
+builder.Services.AddScoped<AnonymousChatSession>();
+builder.Services.AddScoped<ChatIdentityRotator>();
 
 builder.Services.AddScoped<ICartService, FusionCacheCartService>();
 
@@ -237,6 +240,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 
 app.UseMiddleware<AnonymousCartMiddleware>();
+app.UseMiddleware<AnonymousChatMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -249,9 +253,13 @@ app.MapStripeWebhookHandler<StripeEventHandler>();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapPost("/logout", async (SignInManager<ShopUser> signInManager) =>
+app.MapPost("/logout", async (
+    HttpContext context,
+    SignInManager<ShopUser> signInManager,
+    ChatIdentityRotator chatIdentity) =>
 {
     await signInManager.SignOutAsync();
+    await chatIdentity.RotateAsync(context);
     return Results.Redirect("/");
 });
 
