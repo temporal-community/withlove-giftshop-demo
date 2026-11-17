@@ -72,7 +72,7 @@ The `just` deployment recipes source `.secrets.env` and run Aspire non-interacti
 ~/.aspire/deployments/<apphost-sha256>/azureprod.json
 ```
 
-Subsequent runs read from that cache. `just deploy` checks only this AppHost's environment file and removes it when the configured subscription, location, or resource group changes. It then performs a normal deployment so Aspire can save replacement state. `just deploy-clean` forces the same app-scoped reset. The recipes intentionally do not use `--clear-cache`, because that option ignores the cache and also prevents Aspire from saving replacement state.
+Subsequent runs read from that cache. `just deploy` checks only this AppHost's environment file and removes it when the configured subscription, location, or resource group changes. It then performs a normal deployment so Aspire can save replacement state. `just deploy-clean` removes that file and also passes `--clear-cache` to Aspire; the latter can prevent replacement state from being saved during that run.
 
 Collect the following values before running Step 3:
 
@@ -153,10 +153,10 @@ The AppHost therefore continues to disable the default SQL role assignments and 
 
 In production, the Stripe CLI container is replaced by a Stripe Event Destination. After Azure
 provisioning and the Redis health check succeed, `just deploy` reads the shopSite ingress URL,
-creates or reconciles the destination at `https://{shopsite-fqdn}/stripe/webhook`, records the
-signing secret in `.secrets.env`, installs it in Key Vault, restarts shopSite, and verifies that
-the local record and Key Vault agree. Do not create the destination or copy its signing secret
-manually; a failed run may already have created the endpoint.
+creates or reconciles the destination at `https://{shopsite-fqdn}/stripe/webhook`. When it creates
+a destination, it records the signing secret in `.secrets.env`, installs it in Key Vault, and
+restarts shopSite. It then verifies that the local record and Key Vault agree. Do not create the
+destination manually; a failed run may already have created the endpoint.
 
 The deploying identity needs Key Vault secret `get` and `set` permissions (for example, the **Key
 Vault Secrets Officer** role). The preflight check leaves a non-sensitive
@@ -173,7 +173,9 @@ is recovery-only: it deletes and recreates the destination, causing a temporary 
 gap while the new signing secret is installed. `just destroy` removes destinations tagged for the
 selected environment before tearing down Azure resources.
 
-The recipe sources `.secrets.env`, and the explicit value takes precedence over Aspire's cached parameter value. The deploy writes the updated secret to Key Vault and Container Apps picks it up.
+An existing Key Vault deployment can be reused without updating a changed parameter value. The
+webhook automation writes a newly issued signing secret directly to Key Vault; a deploy alone is
+not a reliable way to install a changed secret.
 
 ## Verification checklist
 
@@ -213,17 +215,33 @@ If CI supplies environment variables directly instead of creating `.secrets.env`
 
 ## Secret rotation
 
-**Stripe webhook secret:** Rotate in Stripe Dashboard -> Webhooks -> select destination -> **Rotate secret**. Stripe accepts signatures from both the old and new secret for 24 hours. Replace `Parameters__stripe_webhook_secret` in `.secrets.env`, then deploy (`aspire secret set` updates local development secrets, not Azure deployment inputs):
+**Stripe webhook secret:** After rotating the secret in Stripe, record the new value as
+`Parameters__stripe_webhook_secret` in `.secrets.env`. Install and verify it with:
+
+```bash
+just install-stripe-webhook-secret
+just verify-stripe-webhook-secret
+```
+
+**Temporal Cloud:** Update `Parameters__temporal_api_key` in `.secrets.env`. If changing the
+namespace, also update `Parameters__temporal_address` and `Parameters__temporal_namespace` and
+register the search attributes in the new namespace. Existing workflows remain in the old
+namespace. Deploy to apply configuration changes:
 
 ```bash
 just deploy
 ```
 
-**All other secrets:** Replace the corresponding value in `.secrets.env`, then deploy. Key Vault secrets are picked up by Container Apps within approximately 30 minutes automatically — a forced restart is not required for non-critical rotations.
+Do not assume the deploy updated an existing Key Vault secret: Aspire can reuse the previous
+Key Vault deployment even when a parameter changed. In the Azure portal, create a new version of
+`kv-temporal-api-key` in the vault referenced by both `shopsite` and `workflowserver` if needed.
+For versionless Key Vault references, Container Apps retrieves new versions within 30 minutes and
+restarts active revisions that use them as environment variables. Verify both apps reconnect
+before revoking the old key. See [Azure Container Apps secret management](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets).
 
-```bash
-just deploy
-```
+**Other secrets:** Update `.secrets.env` and verify the corresponding live Key Vault value after
+deployment. A changed deployment parameter alone does not guarantee that an existing vault value
+was replaced. Verify each consuming app picks up the new value before revoking the old credential.
 
 ## Teardown
 
