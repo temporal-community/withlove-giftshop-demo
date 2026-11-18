@@ -137,7 +137,6 @@ cp .secrets.env.example .secrets.env
 
 ```bash
 just deploy          # deploy to azureprod (incremental — reuses cached infra state)
-just deploy-clean    # deploy with fresh state (use after changing location or resource group)
 ```
 
 ### Destroy

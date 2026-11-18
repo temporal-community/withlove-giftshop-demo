@@ -21,10 +21,6 @@ clean:
 build:
     dotnet build {{solution}} --configuration {{configuration}}
 
-# Start the full application stack via Aspire AppHost
-run:
-    dotnet run --project src/WithLove.AppHost
-
 # Purge deleted Key Vaults in the configured resource group
 purge-deleted-keyvaults:
     #!/usr/bin/env bash
@@ -147,10 +143,6 @@ write-stripe-webhook-secret:
 # Deploy to Azure and reconcile the Stripe destination
 deploy environment="azureprod" reset_state="false":
     @bash scripts/deploy.sh "{{environment}}" "{{reset_state}}" "{{apphost}}"
-
-# Deploy with fresh Aspire state
-deploy-clean environment="azureprod":
-    just deploy "{{environment}}" true
 
 # List Azure deployment steps without provisioning
 deploy-preview environment="azureprod":

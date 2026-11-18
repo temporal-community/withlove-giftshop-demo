@@ -72,7 +72,7 @@ The `just` deployment recipes source `.secrets.env` and run Aspire non-interacti
 ~/.aspire/deployments/<apphost-sha256>/azureprod.json
 ```
 
-Subsequent runs read from that cache. `just deploy` checks only this AppHost's environment file and removes it when the configured subscription, location, or resource group changes. It then performs a normal deployment so Aspire can save replacement state. `just deploy-clean` removes that file and also passes `--clear-cache` to Aspire; the latter can prevent replacement state from being saved during that run.
+Subsequent runs read from that cache. `just deploy` checks only this AppHost's environment file and removes it when the configured subscription, location, or resource group changes. It then performs a normal deployment so Aspire can save replacement state. For cache troubleshooting, `just deploy azureprod true` also removes that file and passes `--clear-cache` to Aspire; the latter can prevent replacement state from being saved during that run.
 
 Collect the following values before running Step 3:
 
@@ -135,11 +135,7 @@ https://shopsite.victoriousbeach-abc123.eastus.azurecontainerapps.io
 
 Keep this URL — you need it in the next step.
 
-If you change the Azure location or resource group, use:
-
-```bash
-just deploy-clean
-```
+If you change the Azure location or resource group, `just deploy` clears the mismatched cached state automatically.
 
 `just deploy` also purges matching soft-deleted Key Vaults from the configured disposable resource group, waits for resource-group transitions to finish, and retries only confirmed Azure pending-deletion conditions. Deterministic deployment failures are returned immediately. After a successful deployment, it restarts the Redis revision so a rotated `redis-password` is loaded by the running Redis process before clients reconnect.
 
@@ -279,7 +275,7 @@ azd up --environment azureprod
 | Command | Purpose |
 |---|---|
 | `just deploy` | Deploy or incrementally update Azure resources using the project safeguards |
-| `just deploy-clean` | Deploy with fresh Aspire state after infrastructure-level changes |
+| `just deploy azureprod true` | Clear Aspire deployment state when troubleshooting cache issues |
 | `just destroy` | Tear down Azure resources, wait for deletion, and clean up Key Vaults |
 | `aspire secret list` | Show all stored secrets (values masked) |
 | `aspire secret get <key>` | Read a single secret value |
