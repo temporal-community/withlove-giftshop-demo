@@ -192,7 +192,7 @@ public class EndpointPlannerTests
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.StripeWebhooks)]
-    public void PlanRemove_SelectsOnlyOurOwnEndpoints()
+    public void FindMatches_SelectsOnlyOurOwnEndpoints()
     {
         var all = new List<WebhookEndpoint>
         {
@@ -201,30 +201,30 @@ public class EndpointPlannerTests
             Ours("we_staging", tag: "staging"),
         };
 
-        var plan = EndpointPlanner.PlanRemove(all, Identity);
+        var matches = EndpointPlanner.FindMatches(all, Identity);
 
-        plan.Matches.Select(endpoint => endpoint.Id).Should().Equal("we_ours");
+        matches.Select(endpoint => endpoint.Id).Should().Equal("we_ours");
     }
 
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.StripeWebhooks)]
-    public void PlanRemove_ReportsAbsentRatherThanFailing()
+    public void FindMatches_ReturnsEmptyWhenAbsent()
     {
         // `just destroy` must be re-runnable. "Nothing of ours is here" is the goal state.
-        EndpointPlanner.PlanRemove([Theirs()], Identity).Kind.Should().Be(PlanKind.Absent);
+        EndpointPlanner.FindMatches([Theirs()], Identity).Should().BeEmpty();
     }
 
     [Fact]
     [Trait(TestTraits.Category, TestTraits.Unit)]
     [Trait(TestTraits.Feature, TestTraits.StripeWebhooks)]
-    public void PlanRemove_TakesAllDuplicates()
+    public void FindMatches_ReturnsAllDuplicates()
     {
         // Unlike ensure, removal is not ambiguous: everything carrying our identity is ours, and
         // leaving one behind means an orphan counting against the cap on the next deploy.
-        var plan = EndpointPlanner.PlanRemove([Ours("we_a"), Ours("we_b")], Identity);
+        var matches = EndpointPlanner.FindMatches([Ours("we_a"), Ours("we_b")], Identity);
 
-        plan.Matches.Should().HaveCount(2);
+        matches.Select(endpoint => endpoint.Id).Should().Equal("we_a", "we_b");
     }
 
     [Fact]

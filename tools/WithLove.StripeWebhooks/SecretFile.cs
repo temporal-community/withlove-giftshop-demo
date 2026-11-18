@@ -14,17 +14,8 @@ internal static class SecretFile
     /// owner only.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Any existing file is deleted before the new one is created rather than truncated in place.
-    /// <see cref="FileStreamOptions.UnixCreateMode"/> applies only when the file is actually
-    /// created, so truncating a pre-existing world-readable file would quietly keep its permissions
-    /// — the single most likely way for this to leak.
-    /// </para>
-    /// <para>
-    /// A trailing newline is written so that <c>secret=$(cat "$file")</c> in bash yields exactly the
-    /// secret: command substitution strips trailing newlines, and a file with no final newline is
-    /// awkward for every other line-oriented tool.
-    /// </para>
+    /// Replace the file so <see cref="FileStreamOptions.UnixCreateMode"/> sets its permissions.
+    /// The trailing newline supports line-oriented tools and is stripped by shell substitution.
     /// </remarks>
     public static void Write(string path, string secret)
     {

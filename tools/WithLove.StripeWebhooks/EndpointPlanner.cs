@@ -14,9 +14,6 @@ internal enum PlanKind
     /// <summary>Ours exists and every reconciled field already matches. Make no API call at all.</summary>
     AlreadyCurrent,
 
-    /// <summary>Ours does not exist, and the command did not ask to create it.</summary>
-    Absent,
-
     /// <summary>More than one endpoint claims our identity. Refuse to guess.</summary>
     Duplicates,
 
@@ -37,17 +34,10 @@ internal sealed record EndpointPlan(
     int TotalEndpoints,
     IReadOnlyList<string> Changes);
 
-/// <summary>
-/// Pure decision logic over a materialised endpoint list. Deliberately free of I/O: this is the
-/// branchy part — match, cap, duplicate, create-vs-update — and deploy-time-only code is code
-/// nobody exercises until it matters.
-/// </summary>
+/// <summary>Plans endpoint changes without making Stripe API calls.</summary>
 internal static class EndpointPlanner
 {
-    /// <summary>
-    /// Stripe's per-account webhook endpoint limit. Hitting it is not a Stripe error we can retry
-    /// past; it means orphans have accumulated and a human must choose what to remove.
-    /// </summary>
+    /// <summary>Stripe's per-account endpoint limit; reaching it requires manual cleanup.</summary>
     public const int AccountEndpointCap = 16;
 
     /// <summary>The events this application actually handles. Kept in step with docs/azure-deployment.md Step 4.</summary>
@@ -66,7 +56,7 @@ internal static class EndpointPlanner
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
 
-        var matches = allEndpoints.Where(endpoint => identity.Matches(endpoint.Metadata)).ToList();
+        var matches = FindMatches(allEndpoints, identity);
 
         if (matches.Count > 1)
             return new EndpointPlan(PlanKind.Duplicates, null, matches, allEndpoints.Count, []);
@@ -89,21 +79,14 @@ internal static class EndpointPlanner
             changes);
     }
 
-    public static EndpointPlan PlanRemove(
+    public static List<WebhookEndpoint> FindMatches(
         IReadOnlyList<WebhookEndpoint> allEndpoints,
         WebhookIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(allEndpoints);
         ArgumentNullException.ThrowIfNull(identity);
 
-        var matches = allEndpoints.Where(endpoint => identity.Matches(endpoint.Metadata)).ToList();
-
-        // Unlike ensure, duplicates are not an obstacle to removal: everything carrying our identity
-        // is ours, and teardown wants all of it gone. Refusing here would leave orphans behind
-        // precisely when the operator is trying to clean up.
-        return matches.Count == 0
-            ? new EndpointPlan(PlanKind.Absent, null, matches, allEndpoints.Count, [])
-            : new EndpointPlan(PlanKind.Reconcile, matches[0], matches, allEndpoints.Count, []);
+        return allEndpoints.Where(endpoint => identity.Matches(endpoint.Metadata)).ToList();
     }
 
     /// <summary>
@@ -140,7 +123,7 @@ internal static class EndpointPlanner
         // A disabled endpoint delivers nothing. Re-enabling is part of "make reality match intent",
         // and it makes a deploy self-healing after somebody disables one in the Dashboard to stop a
         // delivery storm and forgets to turn it back on.
-        if (string.Equals(endpoint.Status, "disabled", StringComparison.Ordinal))
+        if (RequiresEnable(endpoint))
             changes.Add("status (disabled -> enabled)");
 
         return changes;

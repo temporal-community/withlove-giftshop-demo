@@ -5,22 +5,9 @@ namespace WithLove.StripeWebhooks;
 /// write to <c>--secret-out</c>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>This is deliberately a second implementation of
-/// <c>WithLoveApplicationExtensions.ValidateStripeWebhookSecret</c>, and it is not redundant.</b>
-/// That one is an AppHost pipeline step guarding a parameter on the publish graph; this one guards
-/// a file write in a standalone tool that must not take a dependency on the AppHost. The two must
-/// agree case for case — <c>WebhookSecretShapeTests</c> holds the shared table, and its twin lives
-/// in <c>tests/WithLove.ProductsAPI.Tests/Unit/AppHost/StripeWebhookSecretValidationTests.cs</c>. A
-/// divergence between two shape checks for one value is a defect that surfaces years later.
-/// </para>
-/// <para>
-/// <b>It is a shape gate, not a semantic gate, and it cannot be made into one.</b>
-/// <c>whsec_placeholder</c> passes every check here by design, and so does a real secret belonging
-/// to an endpoint that was deleted last month. Knowing whether the value is the one Stripe is
-/// actually signing with is what <see cref="SecretFingerprint"/> is for. The two are complementary;
-/// neither subsumes the other.
-/// </para>
+/// This standalone check must agree with the AppHost's publish-time validator. It checks shape,
+/// not whether Stripe uses the value: even <c>whsec_placeholder</c> passes. Fingerprint checks
+/// provide a separate drift signal.
 /// </remarks>
 internal static class WebhookSecretShape
 {

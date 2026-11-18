@@ -47,12 +47,7 @@ internal static class CommandLineParser
                     persisted · 4 Stripe API error.
         """;
 
-    /// <summary>
-    /// The tag becomes a Stripe metadata value and the sole identity key, so it is restricted to
-    /// characters that survive shells, URLs and the Stripe Dashboard's own display unharmed. A tag
-    /// that round-trips differently than it was typed is a tag that silently fails to match, which
-    /// would create a second endpoint rather than reconcile the first.
-    /// </summary>
+    /// <summary>Keep the metadata identity stable across shells and the Stripe Dashboard.</summary>
     private const int MaxTagLength = 64;
 
     public static bool TryParse(
@@ -124,33 +119,28 @@ internal static class CommandLineParser
 
             var value = args[++i];
 
-            // A value that looks like a flag is nearly always a missing argument rather than a
-            // deliberate one, and swallowing it would silently run against the wrong endpoint.
+            // Treat another option as a missing value.
             if (value.StartsWith("--", StringComparison.Ordinal))
             {
                 error = $"Option '{name}' needs a value, but was followed by '{value}'.";
                 return false;
             }
 
-            var alreadySet = name switch
+            switch (name)
             {
-                "--url" => url is not null,
-                "--tag" => tag is not null,
-                _ => secretOut is not null,
-            };
-
-            if (alreadySet)
-            {
-                error = $"Option '{name}' was given more than once.";
-                return false;
+                case "--url" when url is null:
+                    url = value;
+                    break;
+                case "--tag" when tag is null:
+                    tag = value;
+                    break;
+                case "--secret-out" when secretOut is null:
+                    secretOut = value;
+                    break;
+                default:
+                    error = $"Option '{name}' was given more than once.";
+                    return false;
             }
-
-            if (name == "--url")
-                url = value;
-            else if (name == "--tag")
-                tag = value;
-            else
-                secretOut = value;
         }
 
         if (string.IsNullOrWhiteSpace(tag))
@@ -217,13 +207,7 @@ internal static class CommandLineParser
 
     private static bool TryValidateUrl(string url, [NotNullWhen(false)] out string? error)
     {
-        // One message for both failures on purpose. A bare path like "/stripe/webhook" parses as an
-        // absolute *file* URI on Unix, so splitting this into "not absolute" and "not https" would
-        // report "must use https" about a value whose real problem is that it has no host.
-        //
-        // Stripe will not deliver to plain http in live mode either, and the URL this tool is
-        // handed comes from `az containerapp show`, which always yields https. Rejecting anything
-        // else here turns a silently-undeliverable endpoint into an argument error.
+        // A bare path may parse as a file URI, so report both failures as an invalid HTTPS URL.
         if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttps)
         {
             error = $"--url '{url}' must be an absolute https URL, "

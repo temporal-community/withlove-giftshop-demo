@@ -6,10 +6,7 @@ namespace WithLove.StripeWebhooks;
 /// The result of one command: an exit code plus exactly what should be printed.
 /// </summary>
 /// <remarks>
-/// Nothing here is printed by the provisioner itself. Returning the text lets every branch,
-/// including the failure branches, be asserted in a unit test without capturing console output —
-/// and makes it structurally impossible for a secret to reach a log, since the secret never enters
-/// one of these strings.
+/// The caller prints these messages; they must not contain secrets.
 /// </remarks>
 /// <param name="ExitCode">See <see cref="WithLove.StripeWebhooks.ExitCode"/>.</param>
 /// <param name="Status">One line for stdout describing what happened. Never contains a secret.</param>
@@ -25,21 +22,7 @@ internal sealed record ProvisionResult(int ExitCode, string? Status, IReadOnlyLi
 /// Creates, reconciles and removes this application's Stripe webhook endpoint.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>Why the v1 API and not v2.</b> The two APIs are two views over one object pool — an endpoint
-/// created through v1 appears in a v2 list and vice versa, and <c>DELETE
-/// /v1/webhook_endpoints/{id}</c> removes a destination that was created through v2 (those carry a
-/// <c>we_</c> id prefix). So a v1-only tool still sees and manages anything a human created in the
-/// Dashboard's v2 UI; that is the property that makes v1-only safe rather than merely convenient,
-/// and it is worth stating because it otherwise reads as an oversight.
-/// </para>
-/// <para>
-/// Beyond that: v1 needs no <c>Stripe-Version</c> header handling, where a v2 call fails without
-/// one; v2's stricter URL validation buys nothing here because the URL is produced by
-/// <c>az containerapp show</c>, not typed by a human; and v2's distinguishing feature is thin
-/// events, while <c>src/WithLove.Web/Program.cs</c> maps <c>MapStripeWebhookHandler</c>, which is
-/// the snapshot-payload handler.
-/// </para>
+/// The v1 API manages the shared endpoint pool and produces snapshot events, which the web app handles.
 /// </remarks>
 internal sealed class StripeWebhookProvisioner
 {
@@ -140,9 +123,7 @@ internal sealed class StripeWebhookProvisioner
                     .ConfigureAwait(false);
 
             default:
-                // Unreachable: PlanEnsure returns only the five kinds above. Throwing rather than
-                // falling through to create means a new PlanKind cannot quietly acquire the
-                // create-a-Stripe-endpoint behaviour by default.
+                // Fail closed if PlanEnsure gains an unexpected result.
                 throw new InvalidOperationException($"Unexpected plan kind {plan.Kind} from PlanEnsure.");
         }
     }
@@ -164,26 +145,24 @@ internal sealed class StripeWebhookProvisioner
             return StripeFailure("list webhook endpoints", exception, mutated: false);
         }
 
-        var plan = EndpointPlanner.PlanRemove(all, identity);
+        var matches = EndpointPlanner.FindMatches(all, identity);
 
-        // Teardown must be re-runnable. "Nothing of ours is here" is the desired end state, so
-        // reporting it as an error would mean `just destroy` fails the second time it is run — at
-        // exactly the moment the operator is already trying to clean up after something.
-        if (plan.Kind == PlanKind.Absent)
+        // A missing endpoint is already in the desired state for teardown.
+        if (matches.Count == 0)
         {
             return ProvisionResult.Ok(
                 ExitCode.Success,
                 $"no withlove-managed endpoint for tag '{identity.Tag}'; nothing to delete");
         }
 
-        var ids = plan.Matches.Select(endpoint => endpoint.Id).ToList();
+        var ids = matches.Select(endpoint => endpoint.Id).ToList();
 
         if (command.DryRun)
             return ProvisionResult.Ok(ExitCode.Success, $"would delete {string.Join(", ", ids)} for tag '{identity.Tag}'");
 
         var deleted = new List<string>();
         var failed = new List<string>();
-        foreach (var endpoint in plan.Matches)
+        foreach (var endpoint in matches)
         {
             try
             {
@@ -198,9 +177,7 @@ internal sealed class StripeWebhookProvisioner
 
         if (failed.Count > 0)
         {
-            // Report the truth and let the caller decide. `just destroy` applies its own best-effort
-            // posture; swallowing the failure here would hide an orphan that counts against the
-            // 16-endpoint cap on the next deploy.
+            // Report failed deletions so the caller can identify orphaned endpoints.
             return ProvisionResult.Fail(
                 ExitCode.StripeApiError,
                 $"Deleted {deleted.Count} endpoint(s) for tag '{identity.Tag}', but could not delete: "
@@ -232,10 +209,8 @@ internal sealed class StripeWebhookProvisioner
             return StripeFailure("list webhook endpoints", exception, mutated: false);
         }
 
-        // recreate is the repair path, so unlike ensure it is allowed to act on duplicates: every
-        // endpoint carrying our identity goes, and one takes its place. That is precisely the state
-        // ensure refuses to resolve on its own.
-        var matches = all.Where(endpoint => identity.Matches(endpoint.Metadata)).ToList();
+        // Recreate replaces every matching endpoint, including duplicates.
+        var matches = EndpointPlanner.FindMatches(all, identity);
 
         if (all.Count - matches.Count >= EndpointPlanner.AccountEndpointCap)
         {
@@ -274,11 +249,7 @@ internal sealed class StripeWebhookProvisioner
     // ─── create + persist ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// The only path that produces a signing secret, and therefore the only path with a genuinely
-    /// dangerous intermediate state: between the create response and the file write, the secret
-    /// exists nowhere but this process's memory. Every step after the create is ordered to shrink
-    /// that window — the file is written before the fingerprint stamp and before the duplicate
-    /// re-check, both of which are network calls that could otherwise strand it.
+    /// Persist the one-time signing secret before making further Stripe calls.
     /// </summary>
     private async Task<ProvisionResult> CreateAndPersistAsync(
         ToolCommand command,
@@ -298,13 +269,7 @@ internal sealed class StripeWebhookProvisioner
                     Description = identity.Description,
                     Metadata = identity.BuildMetadata(null),
 
-                    // Not optional, and not cosmetic. Omitting api_version makes Stripe stamp the
-                    // endpoint with the *account's* default version; the webhook handler in
-                    // WithLove.Web compares every delivered event's api_version against
-                    // StripeConfiguration.ApiVersion and throws on a mismatch, because
-                    // StripeOptions.ThrowOnWebhookApiVersionMismatch defaults to true. Reading the
-                    // value as a symbol is what keeps it correct across a Stripe.net upgrade — and
-                    // is the reason this tool is .NET rather than curl and jq.
+                    // Match the web handler's Stripe.net API version, not the account default.
                     ApiVersion = StripeConfiguration.ApiVersion,
                 },
                 cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -325,10 +290,7 @@ internal sealed class StripeWebhookProvisioner
                 $"  stripe webhook_endpoints delete {created.Id}");
         }
 
-        // The shape check runs after the write rather than before it on purpose. A malformed value
-        // here would mean Stripe returned something unexpected, and withholding the file would
-        // destroy the only copy of a value that can never be read again. Writing it and then
-        // failing loudly keeps it recoverable by a human while still refusing to report success.
+        // Persist before validation so an unexpected one-time secret remains recoverable.
         try
         {
             SecretFile.Write(command.SecretOut!, secret);
@@ -357,9 +319,7 @@ internal sealed class StripeWebhookProvisioner
 
         var warnings = new List<string>();
 
-        // Fingerprint stamping is a second call by necessity: the value being fingerprinted only
-        // exists once the create has returned. Failing the whole run over it would be wrong — the
-        // secret is already safely on disk, and the fingerprint is a drift signal, not a dependency.
+        // Stamp the fingerprint after creation; failure does not invalidate the saved secret.
         try
         {
             await _endpoints.UpdateAsync(
@@ -378,10 +338,7 @@ internal sealed class StripeWebhookProvisioner
                 + "unavailable for this endpoint until the next `recreate`.");
         }
 
-        // List-then-create is not atomic, so two concurrent runs against one tag can both observe
-        // "absent" and both create. This detects that; it deliberately does not resolve it. One of
-        // the duplicates holds the secret the other process just persisted, and deleting the wrong
-        // one invalidates a secret that by then looks correct everywhere.
+        // Detect concurrent creates without deleting an endpoint whose secret another run saved.
         try
         {
             var after = await ListAllAsync(cancellationToken).ConfigureAwait(false);
@@ -490,9 +447,7 @@ internal sealed class StripeWebhookProvisioner
                 : "No Stripe state was changed.");
 
     /// <summary>
-    /// Renders a <see cref="StripeException"/> for a deploy log. Only the status code, error type
-    /// and Stripe's own message are used — never the request body, which on the create path
-    /// contains nothing secret but on no path is worth the risk of habituating.
+    /// Render a Stripe error without logging the request body.
     /// </summary>
     private static string Describe(StripeException exception)
         => $"{(int)exception.HttpStatusCode} {exception.StripeError?.Type ?? "error"}: "

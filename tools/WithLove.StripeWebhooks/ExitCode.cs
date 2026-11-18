@@ -1,10 +1,7 @@
 namespace WithLove.StripeWebhooks;
 
 /// <summary>
-/// Process exit codes. These are a published contract with the <c>justfile</c> recipes that invoke
-/// this tool — <c>just deploy</c> branches on <see cref="Created"/> vs <see cref="Reconciled"/> to
-/// decide whether there is a new signing secret to install. Do not renumber them, and do not add a
-/// code without updating the justfile and docs/azure-deployment.md at the same time.
+/// Exit codes consumed by deployment scripts. Keep callers and documentation in sync.
 /// </summary>
 internal static class ExitCode
 {
@@ -12,22 +9,17 @@ internal static class ExitCode
     public const int Success = 0;
 
     /// <summary>
-    /// Bad arguments, missing or malformed Stripe API key. Nothing was mutated, and nothing had been
-    /// looked up yet — this is the failure class that must happen before any Stripe state changes.
+    /// Invalid arguments or API key; no Stripe state was changed.
     /// </summary>
     public const int UsageOrConfigurationError = 1;
 
     /// <summary>
-    /// The account is at the endpoint cap, or more than one endpoint claims our identity. The caller
-    /// must look at the printed list and act; the tool will not guess which endpoint to remove.
+    /// Endpoint cap or duplicate identity requires operator action.
     /// </summary>
     public const int Blocked = 2;
 
     /// <summary>
-    /// An endpoint was created in Stripe but its signing secret could not be persisted to
-    /// <c>--secret-out</c>. This is the one genuinely dangerous state in the design: Stripe has
-    /// minted a secret that exists nowhere durable. stderr names the endpoint id and the
-    /// <c>recreate</c> remediation. Never soften this to a warning.
+    /// An endpoint was created but its one-time signing secret could not be saved; recreate it.
     /// </summary>
     public const int CreatedButNotPersisted = 3;
 
@@ -41,11 +33,7 @@ internal static class ExitCode
     public const int Created = 10;
 
     /// <summary>
-    /// Our endpoint already existed and was reconciled in place. No secret was written, because a
-    /// signing secret is readable exactly once — in the body of the create response — and there is
-    /// no rotate API in either Stripe API version. The caller must keep the secret it already has,
-    /// which stays correct across an FQDN change: an in-place url update preserves the endpoint's
-    /// signing secret, confirmed by direct testing against Stripe on 2026-09-14.
+    /// An existing endpoint was reconciled. No new secret was issued; retain the existing one.
     /// </summary>
     public const int Reconciled = 11;
 }
