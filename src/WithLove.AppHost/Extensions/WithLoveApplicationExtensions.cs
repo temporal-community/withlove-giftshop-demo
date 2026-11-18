@@ -1,4 +1,5 @@
 using Aspire.Hosting.Azure;
+using Aspire.Hosting.Dotnet;
 using Aspire.Hosting.Pipelines;
 using Azure.Provisioning.KeyVault;
 using TemporalCommunity.Aspire.Hosting;
@@ -64,17 +65,7 @@ internal static partial class WithLoveApplicationExtensions
     {
         var parameter = builder.AddParameter(StripeWebhookSecretParameterName, secret: true);
 
-        // A named pipeline step rather than a BeforePublishEvent subscriber: the 13.5.3 pipeline
-        // never raises BeforePublishEvent, so a subscriber there is silently never invoked. Ordering
-        // uses the public WellKnownPipelineSteps constants — after parameter values are resolved,
-        // before any publish work — so a malformed value fails the `aspire publish`/`aspire deploy`
-        // pipeline with a named step and no Bicep is written. That beats a well-formed-looking
-        // deployment that fails Stripe signature verification at runtime with no obvious cause.
-        // WellKnownPipelineSteps is still marked evaluation-only in 13.5.3. The alternative is
-        // hard-coding "process-parameters"/"publish-prereq" as literals, which breaks just as
-        // easily and without a compiler diagnostic to warn you. Scoped like the AZPROVISION001
-        // pragma in WithLoveApplicationExtensions.ContainerApps.cs.
-#pragma warning disable ASPIREPIPELINES001
+        // Validate after parameters resolve and before publishing any infrastructure.
         parameter.WithPipelineStepFactory(
             "validate-stripe-webhook-secret",
             async context =>
@@ -88,8 +79,6 @@ internal static partial class WithLoveApplicationExtensions
             dependsOn: [WellKnownPipelineSteps.ProcessParameters],
             requiredBy: [WellKnownPipelineSteps.PublishPrereq],
             description: "Rejects a malformed Stripe webhook signing secret before it reaches Key Vault.");
-#pragma warning restore ASPIREPIPELINES001
-
         return parameter;
     }
 
@@ -190,12 +179,12 @@ internal static partial class WithLoveApplicationExtensions
         return new WithLoveInfrastructure(productsDatabase, redisCache, azureSqlServer);
     }
 
-    private static IResourceBuilder<ProjectResource> AddProductsApi(
+    private static IResourceBuilder<DotnetProjectResource> AddProductsApi(
         IDistributedApplicationBuilder builder,
         WithLoveInfrastructure infrastructure,
         WithLoveParameters parameters)
     {
-        var productsApi = builder.AddProject<Projects.WithLove_ProductsAPI>("productsApi")
+        var productsApi = builder.AddDotnetProject("productsApi", "../WithLove.ProductsAPI/WithLove.ProductsAPI.csproj")
             .WithEnvironment("OPENAI_API_KEY", parameters.OpenAiKey);
 
         productsApi.WaitForAndReference(infrastructure.RedisCache);
@@ -204,7 +193,7 @@ internal static partial class WithLoveApplicationExtensions
         return productsApi;
     }
 
-    private static void ConfigureScalarEndpoint(IResourceBuilder<ProjectResource> productsApi)
+    private static void ConfigureScalarEndpoint(IResourceBuilder<DotnetProjectResource> productsApi)
     {
         // Exclude Scalar from publish mode: ACA terminates TLS at ingress, not Kestrel.
         productsApi
@@ -225,15 +214,15 @@ internal static partial class WithLoveApplicationExtensions
         IDistributedApplicationBuilder builder,
         WithLoveInfrastructure infrastructure,
         WithLoveParameters parameters,
-        IResourceBuilder<ProjectResource> productsApi)
+        IResourceBuilder<DotnetProjectResource> productsApi)
     {
-        var workflowServer = builder.AddProject<Projects.WithLove_WorkflowServer>("workflowServer")
+        var workflowServer = builder.AddDotnetProject("workflowServer", "../WithLove.WorkflowServer/WithLove.WorkflowServer.csproj")
             .WithEnvironment("OPENAI_API_KEY", parameters.OpenAiKey);
 
         workflowServer.WaitForAndReference(infrastructure.ProductsDatabase);
         workflowServer.WithReference(productsApi);
 
-        var shopSite = builder.AddProject<Projects.WithLove_Web>("shopSite")
+        var shopSite = builder.AddDotnetProject("shopSite", "../WithLove.Web/WithLove.Web.csproj")
             .WithEnvironment("OPENAI_API_KEY", parameters.OpenAiKey);
 
         shopSite.WaitForAndReference(infrastructure.RedisCache);
@@ -354,8 +343,8 @@ internal static partial class WithLoveApplicationExtensions
             .WithParameter("principalClientId", sharedIdentity.Resource.ClientId);
     }
 
-    private static IResourceBuilder<ProjectResource> ConfigureKeyVaultAccess(
-        IResourceBuilder<ProjectResource> project,
+    private static IResourceBuilder<DotnetProjectResource> ConfigureKeyVaultAccess(
+        IResourceBuilder<DotnetProjectResource> project,
         IResourceBuilder<AzureKeyVaultResource> keyVault,
         IResourceBuilder<AzureUserAssignedIdentityResource> identity)
         => project
@@ -363,18 +352,18 @@ internal static partial class WithLoveApplicationExtensions
             .WithRoleAssignments(keyVault, KeyVaultBuiltInRole.KeyVaultSecretsUser)
             .WithReference(keyVault);
 
-    private static IResourceBuilder<ProjectResource> WaitForAndReference(
-        this IResourceBuilder<ProjectResource> project,
+    private static IResourceBuilder<DotnetProjectResource> WaitForAndReference(
+        this IResourceBuilder<DotnetProjectResource> project,
         IResourceBuilder<IResourceWithConnectionString> dependency)
         => project.WaitFor(dependency).WithReference(dependency);
 
-    private static IResourceBuilder<ProjectResource> WaitForAndReference(
-        this IResourceBuilder<ProjectResource> project,
-        IResourceBuilder<ProjectResource> dependency)
+    private static IResourceBuilder<DotnetProjectResource> WaitForAndReference(
+        this IResourceBuilder<DotnetProjectResource> project,
+        IResourceBuilder<DotnetProjectResource> dependency)
         => project.WaitFor(dependency).WithReference(dependency);
 
-    private static IResourceBuilder<ProjectResource> WaitForAndReference(
-        this IResourceBuilder<ProjectResource> project,
+    private static IResourceBuilder<DotnetProjectResource> WaitForAndReference(
+        this IResourceBuilder<DotnetProjectResource> project,
         IResourceBuilder<TemporalContainerResource> dependency)
         => project.WaitFor(dependency).WithReference(dependency);
 
@@ -397,7 +386,7 @@ internal static partial class WithLoveApplicationExtensions
         IResourceBuilder<AzureSqlServerResource>? AzureSqlServer);
 
     private sealed record WithLoveApplication(
-        IResourceBuilder<ProjectResource> ProductsApi,
-        IResourceBuilder<ProjectResource> WorkflowServer,
-        IResourceBuilder<ProjectResource> ShopSite);
+        IResourceBuilder<DotnetProjectResource> ProductsApi,
+        IResourceBuilder<DotnetProjectResource> WorkflowServer,
+        IResourceBuilder<DotnetProjectResource> ShopSite);
 }

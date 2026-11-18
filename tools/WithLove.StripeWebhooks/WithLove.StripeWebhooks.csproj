@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>WithLove.StripeWebhooks</RootNamespace>
@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <!-- Match the Stripe.net version used by WithLove.Web so webhook API versions agree. -->
-    <PackageReference Include="Stripe.net" Version="52.4.0" />
+    <PackageReference Include="Stripe.net" Version="53.1.0" />
   </ItemGroup>
 
   <ItemGroup>

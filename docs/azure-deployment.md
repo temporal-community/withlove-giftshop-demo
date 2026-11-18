@@ -6,9 +6,9 @@ For the normal local workflow, use the repository's `just` recipes. They wrap th
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - Azure CLI (`az`) — authenticate with `az login`
-- Aspire CLI — install from [aspire.dev](https://aspire.dev/get-started/install-cli/)
+- Aspire 17 CLI — install from [aspire.dev](https://aspire.dev/get-started/install-cli/)
 - `just` and `jq` for the repository deployment recipes
 - Temporal Cloud account with a namespace provisioned and an API key
 - Stripe account with API keys

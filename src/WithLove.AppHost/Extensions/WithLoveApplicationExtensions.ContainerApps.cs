@@ -1,3 +1,4 @@
+using Aspire.Hosting.Dotnet;
 using Azure.Provisioning.AppContainers;
 
 namespace WithLove.AppHost.Extensions;
@@ -5,7 +6,7 @@ namespace WithLove.AppHost.Extensions;
 internal static partial class WithLoveApplicationExtensions
 {
 #pragma warning disable AZPROVISION001
-    private static void ConfigureWorkflowServer(IResourceBuilder<ProjectResource> workflowServer)
+    private static void ConfigureWorkflowServer(IResourceBuilder<DotnetProjectResource> workflowServer)
     {
         workflowServer.PublishAsAzureContainerApp((_, app) =>
         {
@@ -50,7 +51,7 @@ internal static partial class WithLoveApplicationExtensions
         });
     }
 
-    private static void ConfigureShopSite(IResourceBuilder<ProjectResource> shopSite)
+    private static void ConfigureShopSite(IResourceBuilder<DotnetProjectResource> shopSite)
     {
         shopSite.PublishAsAzureContainerApp((_, app) =>
         {

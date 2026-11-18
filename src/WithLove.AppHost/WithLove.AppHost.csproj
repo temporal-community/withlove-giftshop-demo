@@ -1,12 +1,10 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <!-- Preserve direct dotnet/IDE AppHost execution; evaluate CLI bundle delegation separately. -->
-        <AspireUseCliBundle>false</AspireUseCliBundle>
         <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
         <UserSecretsId>909fc674-6133-45e7-86cc-a46a15048bf4</UserSecretsId>
     </PropertyGroup>
@@ -20,22 +18,18 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\WithLove.ProductsAPI\WithLove.ProductsAPI.csproj" />
-    <ProjectReference Include="..\WithLove.Web\WithLove.Web.csproj" />
-        <ProjectReference Include="..\WithLove.WorkflowServer\WithLove.WorkflowServer.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.6.1" />
-      <PackageReference Include="Aspire.Hosting.Azure.KeyVault" Version="13.6.1" />
-      <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="13.6.1" />
-      <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.6.1" />
-      <PackageReference Include="Aspire.Hosting.Redis" Version="13.6.1" />
-      <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.6.1" />
-      <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.6.0" />
+      <PackageReference Include="Aspire.Hosting.AppHost" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Dotnet" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Azure.KeyVault" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.Redis" Version="17.0.0" />
+      <PackageReference Include="Aspire.Hosting.SqlServer" Version="17.0.0" />
+      <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.6.1" />
       <PackageReference Include="Stripe.Hosting.Aspire" Version="0.6.4" />
-      <PackageReference Include="TemporalCommunity.Aspire.Hosting" Version="0.5.0" />
-      <PackageReference Include="Temporalio" Version="1.20.0" />
+      <PackageReference Include="TemporalCommunity.Aspire.Hosting" Version="0.5.2" />
+      <PackageReference Include="Temporalio" Version="1.22.0" />
     </ItemGroup>
 
 </Project>

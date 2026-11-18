@@ -7,7 +7,8 @@ The sample also uses OpenAI models for inference and embedding generation.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0)
+- [Aspire 17 CLI](https://aspire.dev/get-started/install-cli/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Redis, SQL Server, and Temporal containers)
 - [Stripe CLI](https://github.com/stripe/stripe-cli) — for local webhook forwarding (`brew install stripe/stripe-cli/stripe` on macOS)
 - **OpenAI API key** — used by the chat assistant and embedding generation
@@ -20,7 +21,7 @@ durable AI extension's Temporal Server 1.31.0 minimum.
 
 API keys are defined once in the AppHost using [Aspire parameters](https://learn.microsoft.com/dotnet/aspire/fundamentals/external-parameters) and automatically injected into each project as environment variables. No need to duplicate keys across project appsettings files.
 
-Set up secrets using the Aspire CLI (Aspire 13.2+). Run from the repo root — Aspire auto-discovers the AppHost:
+Set up secrets using the Aspire CLI. Run from the repo root — Aspire auto-discovers the AppHost:
 
 ```bash
 aspire secret set Parameters:openai-api-key "<your-openai-key>"
