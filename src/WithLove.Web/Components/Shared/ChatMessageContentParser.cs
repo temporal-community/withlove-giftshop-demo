@@ -222,7 +222,7 @@ public static partial class ChatMessageContentParser
 
     private static string FormatProductFallback(ProductCard product)
     {
-        var heading = $"**{product.Name}** — ${product.Price:F2}";
+        var heading = $"**{product.Name}** — {PriceFormatter.FormatUsd(product.Price)}";
         return string.IsNullOrWhiteSpace(product.Description)
             ? heading
             : $"{heading}\n{product.Description}";

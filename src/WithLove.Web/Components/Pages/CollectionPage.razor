@@ -95,7 +95,7 @@
                                         <h3 class="font-display text-xl text-stone-800 group-hover:text-primary transition-colors">@product.Name</h3>
                                         <p class="text-stone-500 text-sm font-light italic mb-2">@product.Description</p>
                                         <div class="flex items-center gap-2">
-                                            <span class="text-base font-display text-stone-800">@product.Price.ToString("C")</span>
+                                            <span class="text-base font-display text-stone-800">@FormatUsd(product.Price)</span>
                                         </div>
                                     </div>
                                 </a>

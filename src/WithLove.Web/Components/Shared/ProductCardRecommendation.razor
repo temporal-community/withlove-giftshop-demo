@@ -27,7 +27,7 @@
 
     private string FormatPrice()
     {
-        if (Product.Price < 20) return $"+{Product.Price:C}";
-        return Product.Price.ToString("C");
+        if (Product.Price < 20) return $"+{FormatUsd(Product.Price)}";
+        return FormatUsd(Product.Price);
     }
 }

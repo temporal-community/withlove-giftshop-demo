@@ -73,7 +73,7 @@
                                     <h4 class="font-display text-stone-800 group-hover:text-primary transition-colors truncate">@product.Name</h4>
                                     <p class="text-sm text-stone-500 font-body truncate">@(product.SubCategory ?? "Gift")</p>
                                 </div>
-                                <span class="font-body text-stone-700 font-medium">$@product.Price.ToString("F2")</span>
+                                <span class="font-body text-stone-700 font-medium">@FormatUsd(product.Price)</span>
                             </a>
                         }
                     </div>

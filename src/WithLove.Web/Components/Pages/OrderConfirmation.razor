@@ -86,7 +86,7 @@
                                             <p class="text-xs text-stone-400">Qty: @item.Quantity</p>
                                         }
                                     </div>
-                                    <span class="text-stone-800 font-medium">@item.Amount.ToString("C")</span>
+                                    <span class="text-stone-800 font-medium">@FormatUsd(item.Amount)</span>
                                 </div>
                             }
                         </div>
@@ -135,7 +135,7 @@
                                 </div>
                                 <div class="flex justify-between pt-2 mt-2 border-t border-stone-100">
                                     <span class="font-display uppercase tracking-wider text-xs">Total Paid</span>
-                                    <span class="font-display text-lg text-stone-800">@totalPaid.ToString("C")</span>
+                                    <span class="font-display text-lg text-stone-800">@FormatUsd(totalPaid)</span>
                                 </div>
                             </div>
                         </section>

@@ -192,7 +192,7 @@
                         </div>
                         @if (_appliedDiscount > 0)
                         {
-                            <p class="text-xs text-green-600 mt-2 font-medium">&#10003; @_pointsToRedeem pts will be redeemed for @_appliedDiscount.ToString("C") off</p>
+                            <p class="text-xs text-green-600 mt-2 font-medium">&#10003; @_pointsToRedeem pts will be redeemed for @FormatUsd(_appliedDiscount) off</p>
                         }
                     </div>
                 }

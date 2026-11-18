@@ -25,7 +25,7 @@
                     <p class="text-stone-500 text-xs font-handwriting mt-1 line-clamp-1 italic">"@Item.PersonalNote"</p>
                 }
             </div>
-            <span class="text-stone-800 font-display text-lg flex-shrink-0">@((Item.Price * Item.Quantity).ToString("C"))</span>
+            <span class="text-stone-800 font-display text-lg flex-shrink-0">@(FormatUsd(Item.Price * Item.Quantity))</span>
         </div>
 
         <div class="flex items-center justify-between mt-4">

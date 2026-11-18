@@ -77,7 +77,7 @@
                                         <span class="px-3 py-1 bg-sage-green/10 text-sage-green text-[10px] uppercase tracking-widest font-bold rounded-full">@order.Status</span>
                                     </div>
                                     <h3 class="font-display text-xl text-stone-800">Placed on @order.PlacedAt.ToString("MMMM d, yyyy")</h3>
-                                    <p class="text-sm text-stone-500 font-light">Total: <span class="font-semibold text-stone-800">@order.AmountTotal.ToString("C")</span></p>
+                                    <p class="text-sm text-stone-500 font-light">Total: <span class="font-semibold text-stone-800">@FormatUsd(order.AmountTotal)</span></p>
                                 </div>
                                 <div class="flex items-center gap-4">
                                     <a href="/account/orders/@order.ConfirmationNumber"

@@ -41,7 +41,7 @@
 
                     @* Price *@
                     <div class="flex items-baseline gap-3">
-                        <span class="text-3xl font-display text-stone-800">@product.Price.ToString("C")</span>
+                        <span class="text-3xl font-display text-stone-800">@FormatUsd(product.Price)</span>
                     </div>
 
                     @* Divider *@
